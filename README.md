@@ -1,9 +1,15 @@
-# MovieGen
+# MovieGen + ComicsGen
 
-A web application for producing AI-generated films. Manages the full pipeline:
-screenplay → structured shot-by-shot planning → takes → assembled scenes → final movie.
+Two AI production pipelines in one app, sharing the same monorepo, server, and UI:
 
-See [`SPEC.md`](./SPEC.md) for the full product specification.
+- **MovieGen** — AI-generated films: screenplay → shot-by-shot planning → takes →
+  assembled scenes → final movie. See [`SPEC.md`](./SPEC.md).
+- **ComicsGen** — AI HQ / graphic novels: roteiro → prancha-by-prancha planning →
+  per-quadro renders → programmatic page montage → CBZ / PDF / EPUB.
+  See [`comics-spec.md`](./comics-spec.md).
+
+The frontend has a Films / Comics medium switch; the backend serves films under
+`/api/v1` and comics under `/api/v1/comics`.
 
 ## Quick start (Docker)
 
@@ -25,17 +31,25 @@ npm run typecheck           # type-check every workspace
 node dist/server.js         # run the production build (serves API + frontend)
 ```
 
-`ffmpeg` and `ffprobe` must be on `$PATH` for video assembly (the Docker image
-installs them).
+External tools (all installed by the Docker image):
+- `ffmpeg` / `ffprobe` — film assembly.
+- `python3` + `Pillow`, `img2pdf`, `ebooklib` — comics page montage and book export.
+- `codex` (optional) — AI frame generation for comics (`renders/generate`). Without
+  it, upload renders manually; configure with `CODEX_BIN` / `CODEX_IMAGE_CMD`.
 
 ## Layout
 
 ```
-packages/types   canonical TypeScript format (imported by backend & frontend)
-backend          Fastify API, filesystem storage, in-memory job queue, ffmpeg assembly
-frontend         React + Vite + Tailwind + shadcn-style UI
-dist/            build output: server.js (backend) + public/ (frontend)
+packages/types   canonical format: index.ts (films) + comics.ts (comics)
+backend          Fastify API, filesystem storage, in-memory job queue
+  src/assembly   film ffmpeg two-pass pipeline
+  src/comics     comics stack: storage, services, routes, Pillow montage + book export
+frontend         React + Vite + Tailwind + shadcn-style UI (Films / Comics switch)
+dist/            build output: server.js (backend) + public/ (frontend) + copied .py
 ```
+
+Comics data is namespaced at `data/comics/projects/{id}` so it never collides with
+film projects at `data/projects/{id}`.
 
 ## Architecture decisions (deviations from the spec, explained)
 

@@ -4,6 +4,9 @@
 // the build everywhere it matters. No backwards-compatibility shims.
 // ════════════════════════════════════════════════════════════════════════════
 
+// ComicsGen format (HQ / graphic novels) lives alongside the film format.
+export * from './comics.js';
+
 // ─── Project ──────────────────────────────────────────────────────────────────
 
 export interface Project {
@@ -185,7 +188,12 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface JobProgress {
   id: string;
-  kind: 'scene-assembly' | 'movie-assembly';
+  kind:
+    | 'scene-assembly'
+    | 'movie-assembly'
+    | 'prancha-assembly'
+    | 'book-assembly'
+    | 'render-generate';
   status: JobStatus;
   progress: number;          // 0..1
   message: string;

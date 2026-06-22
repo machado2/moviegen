@@ -17,6 +17,8 @@ import { sceneRoutes } from './routes/scenes.js';
 import { shotRoutes } from './routes/shots.js';
 import { takeRoutes } from './routes/takes.js';
 import { assemblyRoutes } from './routes/assembly.js';
+import { comicsRoutes } from './comics/routes/index.js';
+import * as comicsStorage from './comics/storage.js';
 
 async function buildServer() {
   const app = Fastify({
@@ -65,6 +67,9 @@ async function buildServer() {
     { prefix: '/api/v1' },
   );
 
+  // ComicsGen (HQ / graphic novels) shares the same server under /api/v1/comics.
+  await app.register(comicsRoutes, { prefix: '/api/v1/comics' });
+
   // Serve the built frontend (if present) with SPA fallback.
   if (existsSync(PUBLIC_DIR)) {
     await app.register(fastifyStatic, { root: PUBLIC_DIR, prefix: '/' });
@@ -83,6 +88,7 @@ async function buildServer() {
 
 async function main() {
   await storage.init();
+  await comicsStorage.init();
   const app = await buildServer();
   try {
     await app.listen({ host: HOST, port: PORT });

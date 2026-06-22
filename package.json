@@ -1,0 +1,21 @@
+{
+  "name": "moviegen",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/types",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build -w @moviegen/types && npm run build -w @moviegen/backend && npm run build -w @moviegen/frontend",
+    "dev:backend": "npm run dev -w @moviegen/backend",
+    "dev:frontend": "npm run dev -w @moviegen/frontend",
+    "typecheck": "npm run typecheck -w @moviegen/types && npm run typecheck -w @moviegen/backend && npm run typecheck -w @moviegen/frontend",
+    "start": "node dist/server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

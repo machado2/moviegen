@@ -19,6 +19,7 @@ FROM base AS runtime
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/types/package.json ./packages/types/package.json
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
 
 ENV NODE_ENV=production

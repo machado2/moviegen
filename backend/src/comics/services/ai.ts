@@ -12,32 +12,51 @@ function requireKey(project: ComicsProject): string {
   return project.openrouterApiKey;
 }
 
+// Parsing a long screenplay can legitimately take minutes, but a stalled
+// connection must not hang the job forever — cap it generously.
+const CHAT_TIMEOUT_MS = 8 * 60 * 1000;
+
 async function chat(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://moviegen.local',
-      'X-Title': 'ComicsGen',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new HttpError(502, `OpenRouter request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
+  // One timeout covers the whole exchange — connecting AND reading the (large)
+  // response body. A slow model that dribbles the body must still be capped.
+  const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://moviegen.local',
+        'X-Title': 'ComicsGen',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new HttpError(502, `OpenRouter request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
+    }
+    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = json.choices?.[0]?.message?.content;
+    if (!content) throw new HttpError(502, 'OpenRouter returned no content');
+    return content;
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new HttpError(
+        504,
+        `O modelo "${model}" não respondeu em ${CHAT_TIMEOUT_MS / 60000} min. Tente um modelo de parse mais rápido ou um roteiro menor.`,
+      );
+    }
+    throw new HttpError(502, `OpenRouter request failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const content = json.choices?.[0]?.message?.content;
-  if (!content) throw new HttpError(502, 'OpenRouter returned no content');
-  return content;
 }
 
 function extractJson(raw: string): unknown {

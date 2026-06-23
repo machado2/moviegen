@@ -135,8 +135,14 @@ export const comicsScriptApi = {
       body: json({ content }),
     });
   },
-  parse(projectId: string): Promise<ParsedComicsScript> {
+  // Parse is a background job: returns a jobId to follow over SSE
+  // (comicsAssemblyApi.subscribeJob), then fetch the result with parsed().
+  parse(projectId: string): Promise<{ jobId: string }> {
     return request(`/projects/${projectId}/script/parse`, { method: 'POST' });
+  },
+  // The pending parsed-but-not-applied script, or null. Survives reloads.
+  parsed(projectId: string): Promise<ParsedComicsScript | null> {
+    return request(`/projects/${projectId}/script/parsed`);
   },
   apply(
     projectId: string,

@@ -18,6 +18,10 @@ export interface ScriptImportModalProps {
   applying: boolean;
   error: string | null;
   onApply: (parsed: ParsedComicsScript) => void;
+  /** While a parse job runs: 0..1 progress and a status message. */
+  parsing?: boolean;
+  progress?: number;
+  progressMessage?: string;
 }
 
 /**
@@ -31,6 +35,9 @@ export function ScriptImportModal({
   applying,
   error,
   onApply,
+  parsing = false,
+  progress = 0,
+  progressMessage,
 }: ScriptImportModalProps) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -51,7 +58,25 @@ export function ScriptImportModal({
           </p>
         )}
 
-        {!parsed && (
+        {parsing && (
+          <div className="space-y-2">
+            <div className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {progressMessage ?? 'Parseando roteiro com a IA…'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Isso roda no servidor e pode levar alguns minutos. Você pode fechar
+              esta janela — o resultado fica guardado para revisar e aplicar.
+            </p>
+          </div>
+        )}
+
+        {!parsing && !parsed && (
           <p className="text-sm text-muted-foreground">
             Nenhum roteiro parseado ainda.
           </p>

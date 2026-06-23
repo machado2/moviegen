@@ -16,6 +16,11 @@ export function projectFile(projectId: string): string {
 export function scriptFile(projectId: string): string {
   return path.join(projectDir(projectId), 'script.md');
 }
+// Parsed-but-not-yet-applied script. Persisted so a long parse survives the
+// client navigating away or reloading before it can apply the result.
+export function parsedScriptFile(projectId: string): string {
+  return path.join(projectDir(projectId), 'parsed-script.ncl');
+}
 export function pranchasDir(projectId: string): string {
   return path.join(projectDir(projectId), 'pranchas');
 }

@@ -3,10 +3,14 @@ import type { ParsedComicsScript } from '@moviegen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
-import { parseComicsScript } from '../services/ai.js';
-import { applyParsedComicsScript, structuredImport } from '../services/script.js';
+import {
+  applyParsedComicsScript,
+  getParsedScript,
+  startScriptParse,
+  structuredImport,
+} from '../services/script.js';
 import { readUpload } from '../../lib/multipart.js';
-import { badRequest, notFound } from '../../lib/errors.js';
+import { badRequest } from '../../lib/errors.js';
 
 export async function comicsScriptRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>('/projects/:id/script', async (req) => {
@@ -25,12 +29,19 @@ export async function comicsScriptRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, bytes: Buffer.byteLength(markdown) };
   });
 
-  app.post<{ Params: { id: string } }>('/projects/:id/script/parse', async (req) => {
-    const project = await getProject(req.params.id);
-    if (!(await fs.pathExists(cfs.scriptFile(req.params.id)))) throw notFound('Stored screenplay');
-    const markdown = await fs.readText(cfs.scriptFile(req.params.id));
-    return parseComicsScript(project, markdown);
+  // Parse runs as a background job (it's a multi-minute LLM call). Returns a
+  // jobId; the client follows progress over the shared SSE jobs endpoint, then
+  // GETs /script/parsed for the result.
+  app.post<{ Params: { id: string } }>('/projects/:id/script/parse', async (req, reply) => {
+    const job = await startScriptParse(req.params.id);
+    return reply.code(202).send({ jobId: job.id, ...job });
   });
+
+  // The pending parsed-but-not-applied script, or null. Lets the UI restore the
+  // review/apply step after a reload while a parse was in flight.
+  app.get<{ Params: { id: string } }>('/projects/:id/script/parsed', async (req) =>
+    getParsedScript(req.params.id),
+  );
 
   app.post<{ Params: { id: string }; Body: ParsedComicsScript }>('/projects/:id/script/apply', async (req) => {
     if (!req.body || typeof req.body !== 'object') throw badRequest('ParsedComicsScript body required');

@@ -193,7 +193,8 @@ export interface JobProgress {
     | 'movie-assembly'
     | 'prancha-assembly'
     | 'book-assembly'
-    | 'render-generate';
+    | 'render-generate'
+    | 'script-parse';
   status: JobStatus;
   progress: number;          // 0..1
   message: string;

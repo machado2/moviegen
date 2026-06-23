@@ -6,13 +6,51 @@ import type {
   PranchaRef,
   Quadro,
 } from '@moviegen/types';
+import type { JobProgress } from '@moviegen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
+import { parseComicsScript } from './ai.js';
+import { jobQueue } from '../../jobs/queue.js';
 import { newId, slugify } from '../../lib/ids.js';
-import { badRequest } from '../../lib/errors.js';
+import { badRequest, notFound } from '../../lib/errors.js';
 import { slotFormatFor } from '../layout.js';
 import { validateComicsProject, validatePrancha } from '../validate.js';
+
+// ─── Script parsing (async job) ───────────────────────────────────────────────
+//
+// Parsing a full screenplay is a single multi-minute LLM call, so it runs as a
+// background job: the route returns a jobId immediately and the client tracks
+// progress over SSE. The result is persisted to disk (parsed-script.ncl) the
+// moment it's ready, so it survives the client disconnecting or reloading
+// before applying — the previous synchronous design lost the whole parse if the
+// user navigated away.
+
+/** Kick off a parse job. Returns the queued job (id) immediately. */
+export async function startScriptParse(projectId: string): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  if (!(await fs.pathExists(cfs.scriptFile(projectId)))) throw notFound('Stored screenplay');
+  return jobQueue.start('script-parse', async (handle) => {
+    handle.update(0.05, 'Lendo roteiro');
+    const markdown = await fs.readText(cfs.scriptFile(projectId));
+    handle.update(0.15, 'Interpretando roteiro com o modelo (pode levar alguns minutos)');
+    const parsed = await parseComicsScript(project, markdown);
+    handle.update(0.95, 'Salvando resultado');
+    await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
+  });
+}
+
+/** The last parsed-but-not-yet-applied script, or null if none is pending. */
+export async function getParsedScript(projectId: string): Promise<ParsedComicsScript | null> {
+  await getProject(projectId);
+  if (!(await fs.pathExists(cfs.parsedScriptFile(projectId)))) return null;
+  return fs.readNickel<ParsedComicsScript>(cfs.parsedScriptFile(projectId));
+}
+
+/** Discard a pending parsed script (e.g. after it has been applied). */
+export async function clearParsedScript(projectId: string): Promise<void> {
+  await fs.remove(cfs.parsedScriptFile(projectId));
+}
 
 export async function applyParsedComicsScript(
   projectId: string,
@@ -72,7 +110,10 @@ export async function applyParsedComicsScript(
   }
   refs.sort((a, b) => a.number - b.number);
   project.pranchas = refs;
-  return saveProject(project);
+  const saved = await saveProject(project);
+  // The pending parse has been consumed; drop it so the UI doesn't re-offer it.
+  await clearParsedScript(projectId);
+  return saved;
 }
 
 export type StructuredImportPayload = ComicsProject & { pranchasData?: Prancha[] };

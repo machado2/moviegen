@@ -6,9 +6,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const PORT = Number(process.env.PORT ?? 3000);
 export const HOST = process.env.HOST ?? '0.0.0.0';
 export const DATA_DIR = path.resolve(process.env.DATA_DIR ?? './data');
-export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
-// Comics projects are namespaced separately so they never collide with film
-// projects (both otherwise use {id} directories).
+// Film and comics projects are each namespaced under their medium so the two
+// (both otherwise {id} directories) never collide: data/films/projects and
+// data/comics/projects.
+export const PROJECTS_DIR = path.join(DATA_DIR, 'films', 'projects');
 export const COMICS_PROJECTS_DIR = path.join(DATA_DIR, 'comics', 'projects');
 
 // Where the built frontend lives, relative to the compiled server.

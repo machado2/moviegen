@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc -p tsconfig.json && npm run copy:assets",
-    "copy:assets": "mkdir -p ../dist/comics/assembly && cp src/comics/assembly/*.py ../dist/comics/assembly/",
+    "build": "tsc -p tsconfig.json && node ../scripts/copy-comics-assets.mjs",
+    "copy:assets": "node ../scripts/copy-comics-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node ../dist/server.js"
   },

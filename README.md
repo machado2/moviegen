@@ -34,6 +34,12 @@ pnpm typecheck              # type-check every workspace
 node dist/server.js         # run the production build (serves API + frontend)
 ```
 
+On **Windows (no WSL)**, `.\start.ps1` does the install → build → serve in one
+step (`-Dev` runs the two dev servers instead); it also warns about any required
+external CLI (`ffmpeg`, `nickel`) missing from PATH. All build scripts are
+cross-platform — the external tools (`ffmpeg`, `nickel`, `python`, optional
+`codex`) just need to be installed and on PATH.
+
 ### Supply chain
 
 `pnpm-workspace.yaml` carries some deliberate hardening against dependency

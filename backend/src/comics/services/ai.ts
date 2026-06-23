@@ -190,7 +190,13 @@ function buildCodexArgs(
 
 function runCodex(args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(CODEX_BIN, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    // On Windows the codex CLI is typically a .cmd shim, which Node refuses to
+    // spawn without a shell (it throws EINVAL since the CVE-2024-27980 fix).
+    const child = spawn(CODEX_BIN, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    });
     let stderr = '';
     child.stderr.on('data', (d: Buffer) => {
       stderr += d.toString();

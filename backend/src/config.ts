@@ -36,7 +36,10 @@ export const MONTAGEM_DEFAULTS = {
 
 // External CLI used for AI frame generation (codex image_gen). Configurable.
 export const CODEX_BIN = process.env.CODEX_BIN ?? 'codex';
-export const PYTHON_BIN = process.env.PYTHON_BIN ?? 'python3';
+// Windows ships the interpreter as `python` (and the `py` launcher); `python3`
+// is the POSIX name. Either can be overridden with PYTHON_BIN.
+export const PYTHON_BIN =
+  process.env.PYTHON_BIN ?? (process.platform === 'win32' ? 'python' : 'python3');
 
 // Nickel CLI: evaluates the on-disk .ncl project files back into data.
 export const NICKEL_BIN = process.env.NICKEL_BIN ?? 'nickel';

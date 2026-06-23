@@ -36,3 +36,6 @@ export const MONTAGEM_DEFAULTS = {
 // External CLI used for AI frame generation (codex image_gen). Configurable.
 export const CODEX_BIN = process.env.CODEX_BIN ?? 'codex';
 export const PYTHON_BIN = process.env.PYTHON_BIN ?? 'python3';
+
+// Nickel CLI: evaluates the on-disk .ncl project files back into data.
+export const NICKEL_BIN = process.env.NICKEL_BIN ?? 'nickel';

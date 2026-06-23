@@ -23,7 +23,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     parseModel: DEFAULT_PARSE_MODEL,
     ttsModel: DEFAULT_TTS_MODEL,
   };
-  await fs.writeJson(fs.projectFile(id), project);
+  await fs.writeNickel(fs.projectFile(id), project);
   await fs.ensureDir(fs.scenesDir(id));
   await fs.ensureDir(fs.assetsDir(id));
   return project;
@@ -31,12 +31,12 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
 
 export async function getProject(id: string): Promise<Project> {
   if (!(await fs.pathExists(fs.projectFile(id)))) throw notFound('Project');
-  return fs.readJson<Project>(fs.projectFile(id));
+  return fs.readNickel<Project>(fs.projectFile(id));
 }
 
 export async function saveProject(project: Project): Promise<Project> {
   project.updatedAt = nowIso();
-  await fs.writeJson(fs.projectFile(project.id), project);
+  await fs.writeNickel(fs.projectFile(project.id), project);
   return project;
 }
 
@@ -50,7 +50,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   const summaries: ProjectSummary[] = [];
   for (const id of ids) {
     try {
-      const p = await fs.readJson<Project>(fs.projectFile(id));
+      const p = await fs.readNickel<Project>(fs.projectFile(id));
       summaries.push({
         id: p.id,
         title: p.title,
@@ -60,7 +60,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         sceneCount: p.scenes.length,
       });
     } catch {
-      // Skip directories without a valid project.json.
+      // Skip directories without a valid project.ncl.
     }
   }
   summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

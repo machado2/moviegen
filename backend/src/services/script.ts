@@ -87,8 +87,8 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
       refs: [],
       shots,
     };
-    await fs.writeJson(fs.sceneFile(projectId, sceneId), scene);
-    sceneRefs.push({ id: sceneId, number: ps.number, shortTitle: ps.shortTitle, file: `scenes/${sceneId}.json` });
+    await fs.writeNickel(fs.sceneFile(projectId, sceneId), scene);
+    sceneRefs.push({ id: sceneId, number: ps.number, shortTitle: ps.shortTitle, file: `scenes/${sceneId}.ncl` });
   }
   sceneRefs.sort((a, b) => a.number - b.number);
   project.scenes = sceneRefs;
@@ -138,8 +138,8 @@ export async function structuredImport(projectId: string, payload: unknown): Pro
   for (const ref of incoming.scenes) {
     const scene = byId.get(ref.id);
     if (scene) {
-      await fs.writeJson(fs.sceneFile(project.id, scene.id), scene);
-      refs.push({ id: scene.id, number: scene.number, shortTitle: scene.shortTitle, file: `scenes/${scene.id}.json` });
+      await fs.writeNickel(fs.sceneFile(project.id, scene.id), scene);
+      refs.push({ id: scene.id, number: scene.number, shortTitle: scene.shortTitle, file: `scenes/${scene.id}.ncl` });
     } else {
       // Keep the ref even if scene body wasn't provided (matches "no silent compat").
       refs.push(ref);

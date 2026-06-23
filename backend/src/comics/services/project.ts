@@ -31,7 +31,7 @@ export async function createProject(input: CreateComicsProjectInput): Promise<Co
     openrouterApiKey: null,
     parseModel: DEFAULT_PARSE_MODEL,
   };
-  await fs.writeJson(cfs.projectFile(id), project);
+  await fs.writeNickel(cfs.projectFile(id), project);
   await fs.ensureDir(cfs.pranchasDir(id));
   await fs.ensureDir(cfs.assetsDir(id));
   return project;
@@ -39,12 +39,12 @@ export async function createProject(input: CreateComicsProjectInput): Promise<Co
 
 export async function getProject(id: string): Promise<ComicsProject> {
   if (!(await fs.pathExists(cfs.projectFile(id)))) throw notFound('Comics project');
-  return fs.readJson<ComicsProject>(cfs.projectFile(id));
+  return fs.readNickel<ComicsProject>(cfs.projectFile(id));
 }
 
 export async function saveProject(project: ComicsProject): Promise<ComicsProject> {
   project.updatedAt = nowIso();
-  await fs.writeJson(cfs.projectFile(project.id), project);
+  await fs.writeNickel(cfs.projectFile(project.id), project);
   return project;
 }
 
@@ -58,7 +58,7 @@ export async function listProjects(): Promise<ComicsProjectSummary[]> {
   const out: ComicsProjectSummary[] = [];
   for (const id of ids) {
     try {
-      const p = await fs.readJson<ComicsProject>(cfs.projectFile(id));
+      const p = await fs.readNickel<ComicsProject>(cfs.projectFile(id));
       out.push({
         id: p.id,
         title: p.title,

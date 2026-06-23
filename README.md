@@ -32,6 +32,11 @@ node dist/server.js         # run the production build (serves API + frontend)
 ```
 
 External tools (all installed by the Docker image):
+- `nickel` — the on-disk project format is [Nickel](https://nickel-lang.org)
+  (`project.ncl`, per-scene/prancha `.ncl`); the backend shells out to it to read
+  those files. **Required for local dev too** — install the `nickel` CLI and put it
+  on `PATH` (or point `NICKEL_BIN` at it), e.g. download the release binary from
+  https://github.com/nickel-lang/nickel/releases.
 - `ffmpeg` / `ffprobe` — film assembly.
 - `python3` + `Pillow`, `img2pdf`, `ebooklib` — comics page montage and book export.
 - `codex` (optional) — AI frame generation for comics (`renders/generate`). Without
@@ -55,10 +60,18 @@ film projects at `data/projects/{id}`.
 
 - **Filesystem is the canonical store; no SQLite/Drizzle.** The spec's data model,
   filesystem layout, and "single source of truth" principle are entirely
-  file-based (`project.json`, per-scene JSON, asset/take files), and jobs are
-  explicitly in-memory. The stack table lists SQLite, but no schema or role for it
-  is defined anywhere, so a second redundant store was omitted. All I/O is behind
+  file-based (`project.ncl`, per-scene/prancha `.ncl`, asset/take files), and jobs
+  are explicitly in-memory. The stack table lists SQLite, but no schema or role for
+  it is defined anywhere, so a second redundant store was omitted. All I/O is behind
   `backend/src/storage/filesystem.ts`, so introducing a DB later is localized.
+
+- **On-disk structured data is Nickel, not JSON.** Project/scene/prancha files (and
+  the import/export ZIP) are [Nickel](https://nickel-lang.org) (`.ncl`). Writing is a
+  small serializer (`backend/src/storage/nickel.ts`); reading shells out to the
+  `nickel` binary, which evaluates the file and exports JSON that the backend parses
+  in memory (JSON is only a transient transport, never persisted). The HTTP API,
+  SSE, and the temporary Python montage spec stay JSON — those are transport, not the
+  stored project format. The LLM still returns JSON and is converted on save.
 
 - **Medium-agnostic core vs. video-specific tail (for future comics support).**
   The core — projects, the asset library, scenes, the atomic generation unit

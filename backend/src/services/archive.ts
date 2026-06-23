@@ -18,9 +18,9 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   archive.on('error', (err) => out.destroy(err));
   archive.pipe(out);
 
-  // Redacted project.json (never export the key).
+  // Redacted project.ncl (never export the key).
   const redacted: Project = { ...project, openrouterApiKey: null };
-  archive.append(JSON.stringify(redacted, null, 2), { name: 'project.json' });
+  archive.append(fs.toNickel(redacted), { name: 'project.ncl' });
 
   // script.md
   if (await fs.pathExists(fs.scriptFile(projectId))) {
@@ -46,35 +46,35 @@ export async function importProjectZip(buffer: Buffer): Promise<Project> {
   }
   const entries = zip.getEntries();
 
-  const projectEntry = entries.find((e) => e.entryName === 'project.json' || e.entryName.endsWith('/project.json'));
-  if (!projectEntry) throw badRequest('ZIP does not contain project.json');
+  const projectEntry = entries.find((e) => e.entryName === 'project.ncl' || e.entryName.endsWith('/project.ncl'));
+  if (!projectEntry) throw badRequest('ZIP does not contain project.ncl');
   // The prefix lets us support both flat zips and {projectId}/... wrapped zips.
-  const prefix = projectEntry.entryName.replace(/project\.json$/, '');
+  const prefix = projectEntry.entryName.replace(/project\.ncl$/, '');
 
   let projectJson: unknown;
   try {
-    projectJson = JSON.parse(projectEntry.getData().toString('utf8'));
+    projectJson = await fs.readNickelString(projectEntry.getData().toString('utf8'));
   } catch {
-    throw badRequest('project.json is not valid JSON');
+    throw badRequest('project.ncl is not valid Nickel');
   }
   const errors = validateProject(projectJson);
   if (errors.length) {
-    throw badRequest('project.json does not match the current format', errors.slice(0, 30));
+    throw badRequest('project.ncl does not match the current format', errors.slice(0, 30));
   }
   const incoming = projectJson as Project;
 
   // Validate scene files before committing anything.
   const sceneErrors: string[] = [];
   const sceneEntries = entries.filter(
-    (e) => e.entryName.startsWith(`${prefix}scenes/`) && e.entryName.endsWith('.json'),
+    (e) => e.entryName.startsWith(`${prefix}scenes/`) && e.entryName.endsWith('.ncl'),
   );
   const scenes: Scene[] = [];
   for (const e of sceneEntries) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(e.getData().toString('utf8'));
+      parsed = await fs.readNickelString(e.getData().toString('utf8'));
     } catch {
-      sceneErrors.push(`${e.entryName}: not valid JSON`);
+      sceneErrors.push(`${e.entryName}: not valid Nickel`);
       continue;
     }
     const errs = validateScene(parsed, e.entryName);
@@ -99,7 +99,7 @@ export async function importProjectZip(buffer: Buffer): Promise<Project> {
   for (const e of entries) {
     if (e.isDirectory) continue;
     const rel = e.entryName.slice(prefix.length);
-    if (!rel || rel === 'project.json') continue; // project.json written separately
+    if (!rel || rel === 'project.ncl') continue; // project.ncl written separately
     if (rel.startsWith('..') || path.isAbsolute(rel)) continue; // zip-slip guard
     const dest = path.resolve(root, rel);
     if (!dest.startsWith(root + path.sep)) continue;

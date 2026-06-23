@@ -67,8 +67,8 @@ export async function applyParsedComicsScript(
       layout: pp.layout,
       quadros,
     };
-    await fs.writeJson(cfs.pranchaFile(projectId, pranchaId), prancha);
-    refs.push({ id: pranchaId, number: pp.number, shortTitle: pp.shortTitle, file: `pranchas/${pranchaId}.json` });
+    await fs.writeNickel(cfs.pranchaFile(projectId, pranchaId), prancha);
+    refs.push({ id: pranchaId, number: pp.number, shortTitle: pp.shortTitle, file: `pranchas/${pranchaId}.ncl` });
   }
   refs.sort((a, b) => a.number - b.number);
   project.pranchas = refs;
@@ -111,8 +111,8 @@ export async function structuredImport(projectId: string, payload: unknown): Pro
   for (const ref of incoming.pranchas) {
     const prancha = byId.get(ref.id);
     if (prancha) {
-      await fs.writeJson(cfs.pranchaFile(project.id, prancha.id), prancha);
-      refs.push({ id: prancha.id, number: prancha.number, shortTitle: prancha.shortTitle, file: `pranchas/${prancha.id}.json` });
+      await fs.writeNickel(cfs.pranchaFile(project.id, prancha.id), prancha);
+      refs.push({ id: prancha.id, number: prancha.number, shortTitle: prancha.shortTitle, file: `pranchas/${prancha.id}.ncl` });
     } else {
       refs.push(ref);
     }

@@ -39,17 +39,17 @@ export async function listPranchaRefs(projectId: string): Promise<PranchaRef[]> 
 export async function getPrancha(projectId: string, pranchaId: string): Promise<Prancha> {
   const file = cfs.pranchaFile(projectId, pranchaId);
   if (!(await fs.pathExists(file))) throw notFound('Prancha');
-  return fs.readJson<Prancha>(file);
+  return fs.readNickel<Prancha>(file);
 }
 
 export async function savePrancha(projectId: string, prancha: Prancha): Promise<Prancha> {
-  await fs.writeJson(cfs.pranchaFile(projectId, prancha.id), prancha);
+  await fs.writeNickel(cfs.pranchaFile(projectId, prancha.id), prancha);
   const project = await getProject(projectId);
   const ref: PranchaRef = {
     id: prancha.id,
     number: prancha.number,
     shortTitle: prancha.shortTitle,
-    file: `pranchas/${prancha.id}.json`,
+    file: `pranchas/${prancha.id}.ncl`,
   };
   const idx = project.pranchas.findIndex((p) => p.id === prancha.id);
   if (idx === -1) project.pranchas.push(ref);
@@ -126,7 +126,7 @@ export async function reorderPranchas(projectId: string, orderedIds: string[]): 
   for (let i = 0; i < orderedIds.length; i++) {
     const prancha = await getPrancha(projectId, orderedIds[i]!);
     prancha.number = i + 1;
-    await fs.writeJson(cfs.pranchaFile(projectId, prancha.id), prancha);
+    await fs.writeNickel(cfs.pranchaFile(projectId, prancha.id), prancha);
   }
   const refreshed = await getProject(projectId);
   refreshed.pranchas = orderedIds.map((id, i) => {

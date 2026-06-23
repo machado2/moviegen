@@ -11,7 +11,7 @@ export function projectDir(projectId: string): string {
   return path.join(COMICS_PROJECTS_DIR, projectId);
 }
 export function projectFile(projectId: string): string {
-  return path.join(projectDir(projectId), 'project.json');
+  return path.join(projectDir(projectId), 'project.ncl');
 }
 export function scriptFile(projectId: string): string {
   return path.join(projectDir(projectId), 'script.md');
@@ -20,7 +20,7 @@ export function pranchasDir(projectId: string): string {
   return path.join(projectDir(projectId), 'pranchas');
 }
 export function pranchaFile(projectId: string, pranchaId: string): string {
-  return path.join(pranchasDir(projectId), `${pranchaId}.json`);
+  return path.join(pranchasDir(projectId), `${pranchaId}.ncl`);
 }
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');

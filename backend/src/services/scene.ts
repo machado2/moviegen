@@ -13,18 +13,18 @@ export async function listSceneRefs(projectId: string): Promise<SceneRef[]> {
 export async function getScene(projectId: string, sceneId: string): Promise<Scene> {
   const file = fs.sceneFile(projectId, sceneId);
   if (!(await fs.pathExists(file))) throw notFound('Scene');
-  return fs.readJson<Scene>(file);
+  return fs.readNickel<Scene>(file);
 }
 
 export async function saveScene(projectId: string, scene: Scene): Promise<Scene> {
-  await fs.writeJson(fs.sceneFile(projectId, scene.id), scene);
+  await fs.writeNickel(fs.sceneFile(projectId, scene.id), scene);
   // Keep the SceneRef index in the project in sync.
   const project = await getProject(projectId);
   const ref: SceneRef = {
     id: scene.id,
     number: scene.number,
     shortTitle: scene.shortTitle,
-    file: `scenes/${scene.id}.json`,
+    file: `scenes/${scene.id}.ncl`,
   };
   const idx = project.scenes.findIndex((s) => s.id === scene.id);
   if (idx === -1) project.scenes.push(ref);
@@ -109,7 +109,7 @@ export async function reorderScenes(projectId: string, orderedIds: string[]): Pr
     const sceneId = orderedIds[i]!;
     const scene = await getScene(projectId, sceneId);
     scene.number = i + 1;
-    await fs.writeJson(fs.sceneFile(projectId, scene.id), scene);
+    await fs.writeNickel(fs.sceneFile(projectId, scene.id), scene);
   }
   const refreshed = await getProject(projectId);
   refreshed.scenes = orderedIds.map((id, i) => {

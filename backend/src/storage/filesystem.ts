@@ -6,11 +6,14 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR, PROJECTS_DIR } from '../config.js';
 
+// On-disk project data is Nickel, not JSON. These are the codec entry points.
+export { readNickel, readNickelString, writeNickel, toNickel } from './nickel.js';
+
 export function projectDir(projectId: string): string {
   return path.join(PROJECTS_DIR, projectId);
 }
 export function projectFile(projectId: string): string {
-  return path.join(projectDir(projectId), 'project.json');
+  return path.join(projectDir(projectId), 'project.ncl');
 }
 export function scriptFile(projectId: string): string {
   return path.join(projectDir(projectId), 'script.md');
@@ -19,7 +22,7 @@ export function scenesDir(projectId: string): string {
   return path.join(projectDir(projectId), 'scenes');
 }
 export function sceneFile(projectId: string, sceneId: string): string {
-  return path.join(scenesDir(projectId), `${sceneId}.json`);
+  return path.join(scenesDir(projectId), `${sceneId}.ncl`);
 }
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');
@@ -64,23 +67,6 @@ export async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function readJson<T>(file: string): Promise<T> {
-  const raw = await fs.readFile(file, 'utf8');
-  return JSON.parse(raw) as T;
-}
-
-export async function readJsonRaw(file: string): Promise<unknown> {
-  const raw = await fs.readFile(file, 'utf8');
-  return JSON.parse(raw) as unknown;
-}
-
-export async function writeJson(file: string, value: unknown): Promise<void> {
-  await ensureDir(path.dirname(file));
-  const tmp = `${file}.tmp-${process.pid}`;
-  await fs.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
-  await fs.rename(tmp, file);
 }
 
 export async function readText(file: string): Promise<string> {

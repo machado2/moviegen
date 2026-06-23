@@ -18,7 +18,7 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   archive.pipe(out);
 
   const redacted: ComicsProject = { ...project, openrouterApiKey: null };
-  archive.append(JSON.stringify(redacted, null, 2), { name: 'project.json' });
+  archive.append(fs.toNickel(redacted), { name: 'project.ncl' });
 
   if (await fs.pathExists(cfs.scriptFile(projectId))) {
     archive.file(cfs.scriptFile(projectId), { name: 'script.md' });
@@ -39,30 +39,30 @@ export async function importProjectZip(buffer: Buffer): Promise<ComicsProject> {
     throw badRequest('Uploaded file is not a valid ZIP');
   }
   const entries = zip.getEntries();
-  const projectEntry = entries.find((e) => e.entryName === 'project.json' || e.entryName.endsWith('/project.json'));
-  if (!projectEntry) throw badRequest('ZIP does not contain project.json');
-  const prefix = projectEntry.entryName.replace(/project\.json$/, '');
+  const projectEntry = entries.find((e) => e.entryName === 'project.ncl' || e.entryName.endsWith('/project.ncl'));
+  if (!projectEntry) throw badRequest('ZIP does not contain project.ncl');
+  const prefix = projectEntry.entryName.replace(/project\.ncl$/, '');
 
   let projectJson: unknown;
   try {
-    projectJson = JSON.parse(projectEntry.getData().toString('utf8'));
+    projectJson = await fs.readNickelString(projectEntry.getData().toString('utf8'));
   } catch {
-    throw badRequest('project.json is not valid JSON');
+    throw badRequest('project.ncl is not valid Nickel');
   }
   const errors = validateComicsProject(projectJson);
-  if (errors.length) throw badRequest('project.json does not match the current format', errors.slice(0, 30));
+  if (errors.length) throw badRequest('project.ncl does not match the current format', errors.slice(0, 30));
   const incoming = projectJson as ComicsProject;
 
   const pranchaErrors: string[] = [];
   const pranchaEntries = entries.filter(
-    (e) => e.entryName.startsWith(`${prefix}pranchas/`) && e.entryName.endsWith('.json'),
+    (e) => e.entryName.startsWith(`${prefix}pranchas/`) && e.entryName.endsWith('.ncl'),
   );
   for (const e of pranchaEntries) {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(e.getData().toString('utf8'));
+      parsed = await fs.readNickelString(e.getData().toString('utf8'));
     } catch {
-      pranchaErrors.push(`${e.entryName}: not valid JSON`);
+      pranchaErrors.push(`${e.entryName}: not valid Nickel`);
       continue;
     }
     pranchaErrors.push(...validatePrancha(parsed, e.entryName));
@@ -83,7 +83,7 @@ export async function importProjectZip(buffer: Buffer): Promise<ComicsProject> {
   for (const e of entries) {
     if (e.isDirectory) continue;
     const rel = e.entryName.slice(prefix.length);
-    if (!rel || rel === 'project.json') continue;
+    if (!rel || rel === 'project.ncl') continue;
     if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
     const dest = path.resolve(root, rel);
     if (!dest.startsWith(root + path.sep)) continue;

@@ -1,10 +1,16 @@
 // Simple in-memory async job queue with SSE progress. Single-process by design
 // (v1 is single-user, local). Jobs run immediately; subscribers receive
 // progress events until the job reaches a terminal state.
+//
+// Job state is also journaled to disk (see ./store) so a server restart is
+// visible rather than silent: on boot, recover() flips any record still marked
+// running to an "interrupted" error, and prunes old terminal records. The
+// in-memory map is bounded the same way so a long-lived process doesn't leak.
 
 import { EventEmitter } from 'node:events';
 import type { JobProgress } from '@mediagen/types';
 import { newId, nowIso } from '../lib/ids.js';
+import { loadAllJobs, persistJob, removeJob } from './store.js';
 
 export interface JobHandle {
   id: string;
@@ -12,6 +18,12 @@ export interface JobHandle {
 }
 
 type Runner = (handle: JobHandle) => Promise<void>;
+
+// How long a finished (done/error) job is retained, in memory and on disk,
+// before pruning. Long enough for a user to come back and see a recent result.
+const TERMINAL_TTL_MS = 6 * 60 * 60 * 1000;
+
+const isTerminal = (j: JobProgress): boolean => j.status === 'done' || j.status === 'error';
 
 class JobQueue {
   private jobs = new Map<string, JobProgress>();
@@ -36,6 +48,37 @@ class JobQueue {
   }
 
   /**
+   * Reload journaled jobs after a restart. Any job still marked running/queued
+   * was killed with the previous process — there's no way to resume in-process
+   * work, so mark it errored ("interrupted") and keep it queryable instead of
+   * 404ing. Old terminal records are pruned. Call once at startup.
+   */
+  async recover(): Promise<void> {
+    for (const job of await loadAllJobs()) {
+      if (!isTerminal(job)) {
+        job.status = 'error';
+        job.message = 'Interrupted';
+        job.error = 'Interrupted by a server restart';
+        job.updatedAt = nowIso();
+        void persistJob(job).catch(() => {});
+      }
+      this.jobs.set(job.id, job);
+    }
+    await this.sweep();
+  }
+
+  /** Drop terminal jobs older than the TTL from memory and disk. */
+  private async sweep(): Promise<void> {
+    const now = Date.now();
+    for (const [id, job] of this.jobs) {
+      if (isTerminal(job) && now - Date.parse(job.updatedAt) > TERMINAL_TTL_MS) {
+        this.jobs.delete(id);
+        await removeJob(id).catch(() => {});
+      }
+    }
+  }
+
+  /**
    * Create a job and start running it. Returns the job id immediately. If `ref`
    * is given and already has an active job, that existing job is returned
    * instead of starting a duplicate.
@@ -57,6 +100,7 @@ class JobQueue {
     };
     this.jobs.set(id, job);
     if (ref) this.activeByRef.set(ref, id);
+    this.persist(job);
     this.emit(job);
 
     const clearRef = () => {
@@ -67,11 +111,12 @@ class JobQueue {
       id,
       update: (progress, message) => {
         const j = this.jobs.get(id);
-        if (!j || j.status === 'done' || j.status === 'error') return;
+        if (!j || isTerminal(j)) return;
         j.status = 'running';
         j.progress = Math.max(0, Math.min(1, progress));
         j.message = message;
         j.updatedAt = nowIso();
+        // Progress ticks stay in memory; disk only needs to know it's running.
         this.emit(j);
       },
     };
@@ -81,6 +126,7 @@ class JobQueue {
       const j = this.jobs.get(id)!;
       j.status = 'running';
       j.updatedAt = nowIso();
+      this.persist(j); // journal the running state so a crash is detectable
       this.emit(j);
       try {
         await runner(handle);
@@ -90,6 +136,7 @@ class JobQueue {
         done.message = 'Complete';
         done.updatedAt = nowIso();
         clearRef();
+        this.persist(done);
         this.emit(done);
       } catch (err) {
         const failed = this.jobs.get(id)!;
@@ -98,11 +145,18 @@ class JobQueue {
         failed.error = err instanceof Error ? err.message : String(err);
         failed.updatedAt = nowIso();
         clearRef();
+        this.persist(failed);
         this.emit(failed);
       }
+      void this.sweep();
     });
 
     return job;
+  }
+
+  /** Fire-and-forget journal write; persistence must never break a job. */
+  private persist(job: JobProgress): void {
+    void persistJob({ ...job }).catch(() => {});
   }
 
   private emit(job: JobProgress): void {

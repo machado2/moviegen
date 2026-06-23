@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { HOST, PORT, PUBLIC_DIR } from './config.js';
 import * as storage from './storage/filesystem.js';
+import { jobQueue } from './jobs/queue.js';
 import { HttpError } from './lib/errors.js';
 import type { ApiError } from '@mediagen/types';
 
@@ -89,6 +90,8 @@ async function buildServer() {
 async function main() {
   await storage.init();
   await comicsStorage.init();
+  // Mark any jobs interrupted by a previous restart, and prune old records.
+  await jobQueue.recover();
   const app = await buildServer();
   try {
     await app.listen({ host: HOST, port: PORT });

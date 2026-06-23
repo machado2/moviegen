@@ -1,4 +1,4 @@
-import type { ParsedScript, Project } from '@moviegen/types';
+import type { ParsedScript, Project } from '@mediagen/types';
 import { DEFAULT_PARSE_MODEL, OPENROUTER_BASE } from '../config.js';
 import { badRequest, HttpError } from '../lib/errors.js';
 import { validateParsedScript } from '../lib/validate.js';
@@ -26,7 +26,7 @@ async function chat(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': 'https://moviegen.local',
+      'HTTP-Referer': 'https://mediagen.local',
       'X-Title': 'MovieGen',
     },
     body: JSON.stringify({

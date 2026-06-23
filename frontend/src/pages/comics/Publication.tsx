@@ -4,7 +4,7 @@ import type {
   MontagemFit,
   MontagemOptions,
   PranchaAssemblyStatus,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import { Download, Hammer, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

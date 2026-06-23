@@ -5,8 +5,8 @@ import type {
   Quadro,
   QuadroSlotFormat,
   Render,
-} from '@moviegen/types';
-import { QUADRO_COUNT_BY_LAYOUT } from '@moviegen/types';
+} from '@mediagen/types';
+import { QUADRO_COUNT_BY_LAYOUT } from '@mediagen/types';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

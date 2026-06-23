@@ -1,4 +1,4 @@
-import type { CreateProjectInput, Project, ProjectDTO, ProjectSummary } from '@moviegen/types';
+import type { CreateProjectInput, Project, ProjectDTO, ProjectSummary } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../lib/ids.js';
 import { DEFAULT_PARSE_MODEL, DEFAULT_TTS_MODEL } from '../config.js';

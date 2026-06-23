@@ -3,7 +3,7 @@ import type {
   MovieAssemblyStatus,
   Scene,
   SceneAssemblyStatus,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject } from './project.js';
 import { getScene, listSceneRefs } from './scene.js';

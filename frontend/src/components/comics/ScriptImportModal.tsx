@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ParsedComicsScript } from '@moviegen/types';
+import type { ParsedComicsScript } from '@mediagen/types';
 import {
   Dialog,
   DialogContent,

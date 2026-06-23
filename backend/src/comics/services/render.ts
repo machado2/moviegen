@@ -1,4 +1,4 @@
-import type { Render } from '@moviegen/types';
+import type { Render } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getPrancha, savePrancha } from './prancha.js';

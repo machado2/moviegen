@@ -4,7 +4,7 @@ import type {
   BookFormat,
   JobProgress,
   MontagemOptions,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
 
 export interface UseBookAssemblyResult {

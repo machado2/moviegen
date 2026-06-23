@@ -39,7 +39,7 @@ export async function assembleScene(
   onProgress: ProgressFn = () => {},
 ): Promise<void> {
   if (takePaths.length === 0) throw new Error('No takes to assemble');
-  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'moviegen-scene-'));
+  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mediagen-scene-'));
   try {
     onProgress(0.02, `Normalizing ${takePaths.length} takes…`);
     let done = 0;
@@ -70,7 +70,7 @@ export async function assembleMovie(
   onProgress: ProgressFn = () => {},
 ): Promise<void> {
   if (sceneOutputs.length === 0) throw new Error('No assembled scenes to join');
-  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'moviegen-movie-'));
+  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mediagen-movie-'));
   try {
     onProgress(0.1, `Joining ${sceneOutputs.length} scenes…`);
     await ensureDir(path.dirname(outputPath));

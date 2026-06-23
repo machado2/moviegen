@@ -4,7 +4,7 @@ import type {
   ComicsProjectDTO,
   JobProgress,
   ParsedComicsScript,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

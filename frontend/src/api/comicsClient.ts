@@ -16,7 +16,7 @@ import type {
   PranchaRef,
   Quadro,
   Render,
-} from '@moviegen/types';
+} from '@mediagen/types';
 
 const BASE = '/api/v1/comics';
 

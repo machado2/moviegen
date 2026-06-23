@@ -7,7 +7,7 @@ import path from 'node:path';
 import { HOST, PORT, PUBLIC_DIR } from './config.js';
 import * as storage from './storage/filesystem.js';
 import { HttpError } from './lib/errors.js';
-import type { ApiError } from '@moviegen/types';
+import type { ApiError } from '@mediagen/types';
 
 import { projectRoutes } from './routes/projects.js';
 import { scriptRoutes } from './routes/scripts.js';
@@ -92,7 +92,7 @@ async function main() {
   const app = await buildServer();
   try {
     await app.listen({ host: HOST, port: PORT });
-    app.log.info(`MovieGen listening on http://${HOST}:${PORT} (data: ${path.resolve(process.env.DATA_DIR ?? './data')})`);
+    app.log.info(`MediaGen listening on http://${HOST}:${PORT} (data: ${path.resolve(process.env.DATA_DIR ?? './data')})`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JobProgress, Prancha, PranchaRef, Quadro } from '@moviegen/types';
+import type { JobProgress, Prancha, PranchaRef, Quadro } from '@mediagen/types';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
 
 export interface UsePranchasResult {

@@ -1,5 +1,5 @@
 {
-  "name": "moviegen",
+  "name": "mediagen",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     "frontend"
   ],
   "scripts": {
-    "build": "npm run build -w @moviegen/types && npm run build -w @moviegen/backend && npm run build -w @moviegen/frontend",
-    "dev:backend": "npm run dev -w @moviegen/backend",
-    "dev:frontend": "npm run dev -w @moviegen/frontend",
-    "typecheck": "npm run typecheck -w @moviegen/types && npm run typecheck -w @moviegen/backend && npm run typecheck -w @moviegen/frontend",
+    "build": "npm run build -w @mediagen/types && npm run build -w @mediagen/backend && npm run build -w @mediagen/frontend",
+    "dev:backend": "npm run dev -w @mediagen/backend",
+    "dev:frontend": "npm run dev -w @mediagen/frontend",
+    "typecheck": "npm run typecheck -w @mediagen/types && npm run typecheck -w @mediagen/backend && npm run typecheck -w @mediagen/frontend",
     "start": "node dist/server.js"
   },
   "engines": {

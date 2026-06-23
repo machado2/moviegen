@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Scene, SceneRef, Shot } from '@moviegen/types';
+import type { Scene, SceneRef, Shot } from '@mediagen/types';
 import { api, ApiClientError } from '@/api/client';
 
 export interface UseScenesResult {

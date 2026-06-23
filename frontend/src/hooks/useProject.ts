@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Project, ProjectDTO, ProjectSummary } from '@moviegen/types';
+import type { Project, ProjectDTO, ProjectSummary } from '@mediagen/types';
 import { api, ApiClientError } from '@/api/client';
 
 export interface UseProjectsResult {

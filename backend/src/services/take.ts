@@ -1,4 +1,4 @@
-import type { Take } from '@moviegen/types';
+import type { Take } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getScene, saveScene } from './scene.js';
 import { newId, nowIso } from '../lib/ids.js';

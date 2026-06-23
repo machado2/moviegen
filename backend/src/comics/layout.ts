@@ -1,5 +1,5 @@
-import type { PranchaLayout, QuadroSlotFormat } from '@moviegen/types';
-import { QUADRO_COUNT_BY_LAYOUT } from '@moviegen/types';
+import type { PranchaLayout, QuadroSlotFormat } from '@mediagen/types';
+import { QUADRO_COUNT_BY_LAYOUT } from '@mediagen/types';
 
 export function quadroCount(layout: PranchaLayout): number {
   return QUADRO_COUNT_BY_LAYOUT[layout];

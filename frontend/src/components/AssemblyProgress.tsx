@@ -1,4 +1,4 @@
-import type { JobProgress } from '@moviegen/types';
+import type { JobProgress } from '@mediagen/types';
 import { Badge } from '@/components/ui/badge';
 
 export interface AssemblyProgressProps {

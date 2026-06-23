@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { Project, Scene, Shot } from '@moviegen/types';
+import type { Project, Scene, Shot } from '@mediagen/types';
 import { Copy, Sparkles, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

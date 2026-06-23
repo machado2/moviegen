@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Asset, Character } from '@moviegen/types';
+import type { Asset, Character } from '@mediagen/types';
 import { CharacterCard } from '@/components/CharacterCard';
 import { api, ApiClientError } from '@/api/client';
 

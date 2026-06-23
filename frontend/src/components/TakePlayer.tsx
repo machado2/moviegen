@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Take } from '@moviegen/types';
+import type { Take } from '@mediagen/types';
 import { Check, Play, Star, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

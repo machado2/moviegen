@@ -8,7 +8,7 @@ import type {
   PranchaLayout,
   QuadroSlotFormat,
   QuadroTextType,
-} from '@moviegen/types';
+} from '@mediagen/types';
 
 type Errors = string[];
 

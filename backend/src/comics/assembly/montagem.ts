@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fsp from 'node:fs/promises';
-import type { MontagemOptions, PranchaLayout } from '@moviegen/types';
+import type { MontagemOptions, PranchaLayout } from '@mediagen/types';
 import { PYTHON_BIN } from '../../config.js';
 import { ensureDir } from '../../storage/filesystem.js';
 

@@ -12,7 +12,7 @@ import type {
   Project,
   Scene,
   Shot,
-} from '@moviegen/types';
+} from '@mediagen/types';
 
 type Path = string;
 type Errors = string[];

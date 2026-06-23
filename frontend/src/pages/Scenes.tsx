@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Project, ProjectDTO } from '@moviegen/types';
+import type { Project, ProjectDTO } from '@mediagen/types';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

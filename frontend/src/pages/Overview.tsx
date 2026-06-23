@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ParsedScript, Project, ProjectDTO } from '@moviegen/types';
+import type { ParsedScript, Project, ProjectDTO } from '@mediagen/types';
 import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

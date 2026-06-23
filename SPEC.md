@@ -600,7 +600,7 @@ CMD ["node", "dist/server.js"]
 
 ```yaml
 services:
-  moviegen:
+  mediagen:
     build: .
     ports:
       - "3000:3000"
@@ -622,7 +622,7 @@ docker compose up --build
 ## Repository Structure
 
 ```
-moviegen/
+mediagen/
   packages/
     types/               ← shared TypeScript types (the canonical format definition)
       src/index.ts

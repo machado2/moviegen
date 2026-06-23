@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
-import type { ComicsProject, ParsedComicsScript } from '@moviegen/types';
+import type { ComicsProject, ParsedComicsScript } from '@mediagen/types';
 import { CODEX_BIN, DEFAULT_PARSE_MODEL, OPENROUTER_BASE } from '../../config.js';
 import { badRequest, HttpError } from '../../lib/errors.js';
 import { validateParsedComicsScript } from '../validate.js';
@@ -27,7 +27,7 @@ async function chat(apiKey: string, model: string, system: string, user: string)
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://moviegen.local',
+        'HTTP-Referer': 'https://mediagen.local',
         'X-Title': 'ComicsGen',
       },
       body: JSON.stringify({

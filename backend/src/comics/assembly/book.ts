@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fsp from 'node:fs/promises';
 import archiver from 'archiver';
-import type { BookFormat } from '@moviegen/types';
+import type { BookFormat } from '@mediagen/types';
 import { ensureDir } from '../../storage/filesystem.js';
 import { runPython } from './montagem.js';
 

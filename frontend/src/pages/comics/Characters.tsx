@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ComicsAsset, ComicsCharacter } from '@moviegen/types';
+import type { ComicsAsset, ComicsCharacter } from '@mediagen/types';
 import { Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

@@ -3,7 +3,7 @@
 // progress events until the job reaches a terminal state.
 
 import { EventEmitter } from 'node:events';
-import type { JobProgress } from '@moviegen/types';
+import type { JobProgress } from '@mediagen/types';
 import { newId, nowIso } from '../lib/ids.js';
 
 export interface JobHandle {

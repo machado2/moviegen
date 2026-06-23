@@ -14,7 +14,7 @@ import type {
   MovieAssemblyStatus,
   SceneAssemblyStatus,
   ApiError,
-} from '@moviegen/types';
+} from '@mediagen/types';
 
 const BASE = '/api/v1';
 

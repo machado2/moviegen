@@ -1,5 +1,6 @@
+name: mediagen
 services:
-  moviegen:
+  mediagen:
     build: .
     ports:
       - "3020:3000"

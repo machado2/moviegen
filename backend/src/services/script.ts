@@ -5,7 +5,7 @@ import type {
   Scene,
   SceneRef,
   Shot,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
 import { newId, slugify } from '../lib/ids.js';

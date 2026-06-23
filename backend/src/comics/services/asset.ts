@@ -4,7 +4,7 @@ import type {
   ComicsAssetStatus,
   ComicsCharacter,
   ComicsProject,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';

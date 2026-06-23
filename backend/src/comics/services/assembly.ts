@@ -5,7 +5,7 @@ import type {
   MontagemOptions,
   Prancha,
   PranchaAssemblyStatus,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject } from './project.js';

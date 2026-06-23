@@ -1,4 +1,4 @@
-import type { Prancha, Quadro } from '@moviegen/types';
+import type { Prancha, Quadro } from '@mediagen/types';
 import { layoutSlots } from '@/lib/comicsLayout';
 import { comicsApi } from '@/api/comicsClient';
 import { cn } from '@/lib/utils';

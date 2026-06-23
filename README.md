@@ -1,6 +1,6 @@
-# MovieGen + ComicsGen
+# MediaGen
 
-Two AI production pipelines in one app, sharing the same monorepo, server, and UI:
+Two AI production pipelines in one app (**MovieGen** + **ComicsGen**), sharing the same monorepo, server, and UI:
 
 - **MovieGen** — AI-generated films: screenplay → shot-by-shot planning → takes →
   assembled scenes → final movie. See [`SPEC.md`](./SPEC.md).

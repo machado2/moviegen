@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JobProgress, MovieAssemblyStatus } from '@moviegen/types';
+import type { JobProgress, MovieAssemblyStatus } from '@mediagen/types';
 import { api, ApiClientError } from '@/api/client';
 
 export interface UseAssemblyResult {

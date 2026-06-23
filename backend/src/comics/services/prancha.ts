@@ -1,4 +1,4 @@
-import type { Prancha, PranchaLayout, PranchaRef, Quadro } from '@moviegen/types';
+import type { Prancha, PranchaLayout, PranchaRef, Quadro } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { ParsedScript } from '@moviegen/types';
+import type { ParsedScript } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
 import { parseScript } from '../services/ai.js';

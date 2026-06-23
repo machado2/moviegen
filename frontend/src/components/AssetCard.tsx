@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import type { Asset } from '@moviegen/types';
+import type { Asset } from '@mediagen/types';
 import { Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

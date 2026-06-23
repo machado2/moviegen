@@ -1,4 +1,4 @@
-import type { Asset, AssetRef, Project, Scene, Shot } from '@moviegen/types';
+import type { Asset, AssetRef, Project, Scene, Shot } from '@mediagen/types';
 
 /**
  * Assemble a full text prompt for a shot, combining the global style,

@@ -1,4 +1,4 @@
-import type { SceneAssemblyStatus } from '@moviegen/types';
+import type { SceneAssemblyStatus } from '@mediagen/types';
 import { Clapperboard, Download, Film, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

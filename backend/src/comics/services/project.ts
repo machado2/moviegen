@@ -2,7 +2,7 @@ import type {
   ComicsProject,
   ComicsProjectDTO,
   ComicsProjectSummary,
-} from '@moviegen/types';
+} from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../../lib/ids.js';

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import archiver from 'archiver';
 import AdmZip from 'adm-zip';
-import type { ComicsProject } from '@moviegen/types';
+import type { ComicsProject } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, createProject, saveProject } from './project.js';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Asset, AssetRole, AssetType } from '@moviegen/types';
+import type { Asset, AssetRole, AssetType } from '@mediagen/types';
 import { Download, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

@@ -1,4 +1,4 @@
-import type { Render } from '@moviegen/types';
+import type { Render } from '@mediagen/types';
 import {
   Dialog,
   DialogContent,

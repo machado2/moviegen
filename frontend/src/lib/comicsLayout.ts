@@ -1,4 +1,4 @@
-import type { PranchaLayout } from '@moviegen/types';
+import type { PranchaLayout } from '@mediagen/types';
 
 /**
  * Geometry helper mirroring the backend montage layout (montagem.py) so the

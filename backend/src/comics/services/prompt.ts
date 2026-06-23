@@ -1,4 +1,4 @@
-import type { ComicsProject, Prancha, Quadro, QuadroText } from '@moviegen/types';
+import type { ComicsProject, Prancha, Quadro, QuadroText } from '@mediagen/types';
 
 function formatText(t: QuadroText): string {
   const speaker = t.speaker ?? 'personagem';

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { Quadro, QuadroText, QuadroTextType } from '@moviegen/types';
+import type { Quadro, QuadroText, QuadroTextType } from '@mediagen/types';
 import {
   Check,
   FileText,

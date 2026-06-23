@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { BookFormat, MontagemOptions } from '@moviegen/types';
+import type { BookFormat, MontagemOptions } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import {

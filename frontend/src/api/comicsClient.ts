@@ -144,6 +144,11 @@ export const comicsScriptApi = {
   parsed(projectId: string): Promise<ParsedComicsScript | null> {
     return request(`/projects/${projectId}/script/parsed`);
   },
+  // The parse job currently running for this project, or null. Lets the UI
+  // re-attach to an in-flight parse after a reload.
+  parseActive(projectId: string): Promise<JobProgress | null> {
+    return request(`/projects/${projectId}/script/parse/active`);
+  },
   apply(
     projectId: string,
     parsed: ParsedComicsScript,

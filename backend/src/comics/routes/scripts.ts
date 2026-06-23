@@ -5,6 +5,7 @@ import * as fs from '../../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
 import {
   applyParsedComicsScript,
+  getActiveParseJob,
   getParsedScript,
   startScriptParse,
   structuredImport,
@@ -36,6 +37,12 @@ export async function comicsScriptRoutes(app: FastifyInstance): Promise<void> {
     const job = await startScriptParse(req.params.id);
     return reply.code(202).send({ jobId: job.id, ...job });
   });
+
+  // The parse job currently running for this project, or null. Lets the UI
+  // re-attach to an in-flight parse after a reload lost the job id.
+  app.get<{ Params: { id: string } }>('/projects/:id/script/parse/active', async (req) =>
+    getActiveParseJob(req.params.id),
+  );
 
   // The pending parsed-but-not-applied script, or null. Lets the UI restore the
   // review/apply step after a reload while a parse was in flight.

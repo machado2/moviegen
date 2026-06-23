@@ -26,18 +26,32 @@ import { validateComicsProject, validatePrancha } from '../validate.js';
 // before applying — the previous synchronous design lost the whole parse if the
 // user navigated away.
 
-/** Kick off a parse job. Returns the queued job (id) immediately. */
+// Ref under which a project's parse job is tracked, so a reload can re-attach
+// to an in-flight parse and a second click can't start a duplicate.
+const parseJobRef = (projectId: string): string => `comics-parse:${projectId}`;
+
+/** Kick off a parse job (or return the one already running). */
 export async function startScriptParse(projectId: string): Promise<JobProgress> {
   const project = await getProject(projectId);
   if (!(await fs.pathExists(cfs.scriptFile(projectId)))) throw notFound('Stored screenplay');
-  return jobQueue.start('script-parse', async (handle) => {
-    handle.update(0.05, 'Lendo roteiro');
-    const markdown = await fs.readText(cfs.scriptFile(projectId));
-    handle.update(0.15, 'Interpretando roteiro com o modelo (pode levar alguns minutos)');
-    const parsed = await parseComicsScript(project, markdown);
-    handle.update(0.95, 'Salvando resultado');
-    await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
-  });
+  return jobQueue.start(
+    'script-parse',
+    async (handle) => {
+      handle.update(0.05, 'Lendo roteiro');
+      const markdown = await fs.readText(cfs.scriptFile(projectId));
+      handle.update(0.15, 'Interpretando roteiro com o modelo (pode levar alguns minutos)');
+      const parsed = await parseComicsScript(project, markdown);
+      handle.update(0.95, 'Salvando resultado');
+      await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
+    },
+    parseJobRef(projectId),
+  );
+}
+
+/** The parse job currently running for this project, or null. */
+export async function getActiveParseJob(projectId: string): Promise<JobProgress | null> {
+  await getProject(projectId);
+  return jobQueue.findActiveByRef(parseJobRef(projectId)) ?? null;
 }
 
 /** The last parsed-but-not-yet-applied script, or null if none is pending. */

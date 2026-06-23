@@ -15,6 +15,10 @@ type Runner = (handle: JobHandle) => Promise<void>;
 
 class JobQueue {
   private jobs = new Map<string, JobProgress>();
+  // Maps an opaque caller "ref" (e.g. `comics-parse:<projectId>`) to the id of
+  // its currently-active (queued/running) job, so callers can dedupe and the
+  // UI can re-attach to an in-flight job after a reload lost the job id.
+  private activeByRef = new Map<string, string>();
   private emitter = new EventEmitter();
 
   constructor() {
@@ -25,8 +29,22 @@ class JobQueue {
     return this.jobs.get(id);
   }
 
-  /** Create a job and start running it. Returns the job id immediately. */
-  start(kind: JobProgress['kind'], runner: Runner): JobProgress {
+  /** The active (queued/running) job for a ref, if any. */
+  findActiveByRef(ref: string): JobProgress | undefined {
+    const id = this.activeByRef.get(ref);
+    return id ? this.jobs.get(id) : undefined;
+  }
+
+  /**
+   * Create a job and start running it. Returns the job id immediately. If `ref`
+   * is given and already has an active job, that existing job is returned
+   * instead of starting a duplicate.
+   */
+  start(kind: JobProgress['kind'], runner: Runner, ref?: string): JobProgress {
+    if (ref) {
+      const existing = this.findActiveByRef(ref);
+      if (existing) return existing;
+    }
     const id = newId('job');
     const job: JobProgress = {
       id,
@@ -38,7 +56,12 @@ class JobQueue {
       updatedAt: nowIso(),
     };
     this.jobs.set(id, job);
+    if (ref) this.activeByRef.set(ref, id);
     this.emit(job);
+
+    const clearRef = () => {
+      if (ref && this.activeByRef.get(ref) === id) this.activeByRef.delete(ref);
+    };
 
     const handle: JobHandle = {
       id,
@@ -66,6 +89,7 @@ class JobQueue {
         done.progress = 1;
         done.message = 'Complete';
         done.updatedAt = nowIso();
+        clearRef();
         this.emit(done);
       } catch (err) {
         const failed = this.jobs.get(id)!;
@@ -73,6 +97,7 @@ class JobQueue {
         failed.message = 'Failed';
         failed.error = err instanceof Error ? err.message : String(err);
         failed.updatedAt = nowIso();
+        clearRef();
         this.emit(failed);
       }
     });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ComicsProject,
   ComicsProjectDTO,
@@ -43,22 +43,65 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const scriptInput = useRef<HTMLInputElement>(null);
   const structuredInput = useRef<HTMLInputElement>(null);
 
-  // Restore a parse that finished (or is pending) while the page was away: the
-  // result is persisted server-side, so a reload mid-parse never loses it.
+  // Follow a parse job over SSE: stream progress, then load the persisted
+  // result on success. Shared by a fresh parse and by re-attaching after a
+  // reload, so both behave identically.
+  const trackParse = useCallback(
+    (jobId: string) => {
+      comicsApi.assembly.subscribeJob(
+        project.id,
+        jobId,
+        (p) => {
+          setParseJob(p);
+          if (p.status === 'done') {
+            setParsing(false);
+            void comicsApi.script
+              .parsed(project.id)
+              .then((result) => setParsed(result))
+              .catch((e) =>
+                setParseError(e instanceof ComicsApiError ? e.message : String(e)),
+              );
+          } else if (p.status === 'error') {
+            setParsing(false);
+            setParseError(p.error ?? 'Falha ao parsear o roteiro');
+          }
+        },
+        () => {
+          setParsing(false);
+          setParseError(
+            'Conexão de progresso perdida. O parse pode continuar rodando no servidor — reabra para conferir.',
+          );
+        },
+      );
+    },
+    [project.id],
+  );
+
+  // On load, restore parse state the page was away for: re-attach to an
+  // in-flight parse job, or surface a finished-but-unapplied result. Both are
+  // server-side, so a reload mid-parse never loses anything.
   useEffect(() => {
     let alive = true;
-    void comicsApi.script
-      .parsed(project.id)
-      .then((p) => {
-        if (alive && p) setParsed(p);
-      })
-      .catch(() => {
+    void (async () => {
+      try {
+        const active = await comicsApi.script.parseActive(project.id);
+        if (!alive) return;
+        if (active && (active.status === 'running' || active.status === 'queued')) {
+          setParsing(true);
+          setParseJob(active);
+          trackParse(active.id);
+          return;
+        }
+        const pending = await comicsApi.script.parsed(project.id);
+        if (alive && pending) setParsed(pending);
+      } catch {
         /* no pending parse, or project not yet loaded */
-      });
+      }
+    })();
     return () => {
       alive = false;
     };
-  }, [project.id]);
+  }, [project.id, trackParse]);
 
   const save = async () => {
     setSaving(true);
@@ -96,34 +139,10 @@ export function Overview({ project, onChanged }: OverviewProps) {
     setParseJob(null);
     setParseOpen(true);
     try {
+      // Parse runs server-side as a job; the result is persisted, so closing
+      // this dialog (or reloading) is safe — trackParse follows it over SSE.
       const { jobId } = await comicsApi.script.parse(project.id);
-      // Parse runs server-side as a job; follow its progress over SSE. The
-      // result is persisted, so closing this dialog (or reloading) is safe.
-      comicsApi.assembly.subscribeJob(
-        project.id,
-        jobId,
-        (p) => {
-          setParseJob(p);
-          if (p.status === 'done') {
-            setParsing(false);
-            void comicsApi.script
-              .parsed(project.id)
-              .then((result) => setParsed(result))
-              .catch((e) =>
-                setParseError(e instanceof ComicsApiError ? e.message : String(e)),
-              );
-          } else if (p.status === 'error') {
-            setParsing(false);
-            setParseError(p.error ?? 'Falha ao parsear o roteiro');
-          }
-        },
-        () => {
-          setParsing(false);
-          setParseError(
-            'Conexão de progresso perdida. O parse pode continuar rodando no servidor — reabra para conferir.',
-          );
-        },
-      );
+      trackParse(jobId);
     } catch (e) {
       setParsing(false);
       setParseError(e instanceof ComicsApiError ? e.message : String(e));
@@ -229,6 +248,11 @@ export function Overview({ project, onChanged }: OverviewProps) {
             <Sparkles className="h-4 w-4" />
             {parsing ? 'Parseando…' : 'Parsear com IA'}
           </Button>
+          {parsing && (
+            <Button variant="secondary" onClick={() => setParseOpen(true)}>
+              <Sparkles className="h-4 w-4" /> Ver progresso do parse
+            </Button>
+          )}
           {!parsing && parsed && (
             <Button variant="secondary" onClick={() => setParseOpen(true)}>
               <Sparkles className="h-4 w-4" /> Revisar parse pendente

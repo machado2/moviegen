@@ -1,0 +1,29 @@
+packages:
+  - packages/types
+  - backend
+  - frontend
+
+# The compiled server runs from the repo-root dist/ (tsc outDir ../dist), so its
+# runtime deps must resolve from root node_modules. A flat, hoisted layout (like
+# npm's) keeps that working; pnpm's default isolated linker would leave fastify
+# et al. under backend/node_modules where dist/server.js can't see them.
+nodeLinker: hoisted
+
+# ─── Supply-chain hardening (see README "Supply chain") ──────────────────────
+# pnpm v10 does NOT run dependency lifecycle scripts (postinstall, etc.) by
+# default — the #1 vector for npm malware. Only the packages listed here are
+# allowed to run install scripts; everything else is blocked silently.
+# To extend the list after adding a dep, run `pnpm approve-builds`.
+onlyBuiltDependencies:
+  - esbuild # vite + tsx bundler; install script places the platform binary
+
+# Refuse to install any version published less than this many minutes ago, so a
+# freshly-compromised release isn't adopted in the window before it's caught and
+# yanked. 1440 = 24h. Raise for a wider safety margin; lower to adopt fixes faster.
+minimumReleaseAge: 1440
+# Exempt browserslist's data packages: they publish many times a day (so every
+# in-range version is always newer than the cooldown) and carry negligible
+# supply-chain risk — they're generated Chromium/caniuse version tables, not code.
+minimumReleaseAgeExclude:
+  - electron-to-chromium
+  - caniuse-lite

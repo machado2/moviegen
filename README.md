@@ -22,14 +22,35 @@ Project data is persisted to `./data` (mounted into the container at `/data`).
 
 ## Development
 
+This repo uses **pnpm** (pinned via the root `packageManager` field — run
+`corepack enable` once and the right version is used automatically).
+
 ```sh
-npm install                 # install all workspace deps
-npm run dev:backend         # Fastify API on :3000 (tsx watch)
-npm run dev:frontend        # Vite dev server on :5173 (proxies /api → :3000)
-npm run build               # build types → backend (→ dist/) → frontend (→ dist/public/)
-npm run typecheck           # type-check every workspace
+pnpm install                # install all workspace deps
+pnpm dev:backend            # Fastify API on :3000 (tsx watch)
+pnpm dev:frontend           # Vite dev server on :5173 (proxies /api → :3000)
+pnpm build                  # build types → backend (→ dist/) → frontend (→ dist/public/)
+pnpm typecheck              # type-check every workspace
 node dist/server.js         # run the production build (serves API + frontend)
 ```
+
+### Supply chain
+
+`pnpm-workspace.yaml` carries some deliberate hardening against dependency
+supply-chain attacks:
+
+- **Lifecycle scripts are blocked by default.** pnpm won't run a dependency's
+  `postinstall`/`install` script — the most common npm-malware vector — unless
+  it's listed in `onlyBuiltDependencies`. After adding a dep that legitimately
+  needs to build (native addon, downloaded binary), run `pnpm approve-builds`.
+- **New releases sit in a cooldown.** `minimumReleaseAge` refuses any version
+  published less than 24h ago, so a freshly-compromised release isn't pulled in
+  before it's caught and yanked. High-frequency data packages
+  (`electron-to-chromium`, `caniuse-lite`) are exempted via
+  `minimumReleaseAgeExclude`.
+- **CI/Docker installs are frozen.** The image runs `pnpm install
+  --frozen-lockfile`, so it installs exactly what `pnpm-lock.yaml` pins and never
+  resolves anything new at build time.
 
 External tools (all installed by the Docker image):
 - `nickel` — the on-disk project format is [Nickel](https://nickel-lang.org)

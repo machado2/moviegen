@@ -19,13 +19,16 @@ RUN apt-get update \
 
 FROM base AS builder
 WORKDIR /app
-COPY package*.json ./
+# pnpm via corepack (version pinned by the root package.json "packageManager" field).
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/types/package.json packages/types/
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
-RUN npm ci
+# --frozen-lockfile: install exactly what the lockfile pins, never resolve anew.
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM base AS runtime
 WORKDIR /app

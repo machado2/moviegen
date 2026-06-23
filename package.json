@@ -3,19 +3,18 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/types",
-    "backend",
-    "frontend"
-  ],
+  "packageManager": "pnpm@10.20.0",
   "scripts": {
-    "build": "npm run build -w @mediagen/types && npm run build -w @mediagen/backend && npm run build -w @mediagen/frontend",
-    "dev:backend": "npm run dev -w @mediagen/backend",
-    "dev:frontend": "npm run dev -w @mediagen/frontend",
-    "typecheck": "npm run typecheck -w @mediagen/types && npm run typecheck -w @mediagen/backend && npm run typecheck -w @mediagen/frontend",
+    "build": "pnpm --filter @mediagen/types build && pnpm --filter @mediagen/backend build && pnpm --filter @mediagen/frontend build",
+    "dev:backend": "pnpm --filter @mediagen/backend dev",
+    "dev:frontend": "pnpm --filter @mediagen/frontend dev",
+    "typecheck": "pnpm --filter @mediagen/types typecheck && pnpm --filter @mediagen/backend typecheck && pnpm --filter @mediagen/frontend typecheck",
     "start": "node dist/server.js"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@mediagen/types": "workspace:*"
   }
 }

@@ -1,5 +1,6 @@
 import type {
   Asset,
+  JobProgress,
   ParsedScript,
   Project,
   Scene,
@@ -8,9 +9,59 @@ import type {
 } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
+import { parseScript } from './ai.js';
+import { jobQueue } from '../jobs/queue.js';
 import { newId, slugify } from '../lib/ids.js';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, notFound } from '../lib/errors.js';
 import { validateProject, validateScene } from '../lib/validate.js';
+
+// ─── Script parsing (async job) ───────────────────────────────────────────────
+//
+// Parsing a full screenplay is a single multi-minute LLM call, so it runs as a
+// background job: the route returns a jobId immediately and the client tracks
+// progress over SSE. The result is persisted to disk (parsed-script.ncl) the
+// moment it's ready, so it survives the client disconnecting or reloading
+// before applying.
+
+// Ref under which a project's parse job is tracked, so a reload can re-attach
+// to an in-flight parse and a second click can't start a duplicate.
+const parseJobRef = (projectId: string): string => `film-parse:${projectId}`;
+
+/** Kick off a parse job (or return the one already running). */
+export async function startScriptParse(projectId: string): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  if (!(await fs.pathExists(fs.scriptFile(projectId)))) throw notFound('Stored screenplay');
+  return jobQueue.start(
+    'script-parse',
+    async (handle) => {
+      handle.update(0.05, 'Reading screenplay');
+      const markdown = await fs.readText(fs.scriptFile(projectId));
+      handle.update(0.15, 'Parsing screenplay with the model (this can take a few minutes)');
+      const parsed = await parseScript(project, markdown);
+      handle.update(0.95, 'Saving result');
+      await fs.writeNickel(fs.parsedScriptFile(projectId), parsed);
+    },
+    parseJobRef(projectId),
+  );
+}
+
+/** The last parsed-but-not-yet-applied script, or null if none is pending. */
+export async function getParsedScript(projectId: string): Promise<ParsedScript | null> {
+  await getProject(projectId);
+  if (!(await fs.pathExists(fs.parsedScriptFile(projectId)))) return null;
+  return fs.readNickel<ParsedScript>(fs.parsedScriptFile(projectId));
+}
+
+/** Discard a pending parsed script (e.g. after it has been applied). */
+export async function clearParsedScript(projectId: string): Promise<void> {
+  await fs.remove(fs.parsedScriptFile(projectId));
+}
+
+/** The parse job currently running for this project, or null. */
+export async function getActiveParseJob(projectId: string): Promise<JobProgress | null> {
+  await getProject(projectId);
+  return jobQueue.findActiveByRef(parseJobRef(projectId)) ?? null;
+}
 
 /**
  * Apply a reviewed ParsedScript to a project: create character assets (pending),
@@ -92,7 +143,10 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
   }
   sceneRefs.sort((a, b) => a.number - b.number);
   project.scenes = sceneRefs;
-  return saveProject(project);
+  const saved = await saveProject(project);
+  // The pending parse has been consumed; drop it so the UI doesn't re-offer it.
+  await clearParsedScript(projectId);
+  return saved;
 }
 
 // Structured import: a full Project plus (optionally) full scene contents.

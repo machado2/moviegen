@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import type { ParsedScript, Project, ProjectDTO } from '@mediagen/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { JobProgress, ParsedScript, Project, ProjectDTO } from '@mediagen/types';
 import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,11 +31,72 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [parseOpen, setParseOpen] = useState(false);
   const [parsed, setParsed] = useState<ParsedScript | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [parseJob, setParseJob] = useState<JobProgress | null>(null);
   const [applying, setApplying] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
   const scriptInput = useRef<HTMLInputElement>(null);
   const structuredInput = useRef<HTMLInputElement>(null);
+
+  // Follow a parse job over SSE: stream progress, then load the persisted
+  // result on success. Shared by a fresh parse and by re-attaching after a
+  // reload, so both behave identically.
+  const trackParse = useCallback(
+    (jobId: string) => {
+      api.assembly.subscribeJob(
+        project.id,
+        jobId,
+        (p) => {
+          setParseJob(p);
+          if (p.status === 'done') {
+            setParsing(false);
+            void api.script
+              .parsed(project.id)
+              .then((result) => setParsed(result))
+              .catch((e) =>
+                setParseError(e instanceof ApiClientError ? e.message : String(e)),
+              );
+          } else if (p.status === 'error') {
+            setParsing(false);
+            setParseError(p.error ?? 'Failed to parse the screenplay');
+          }
+        },
+        () => {
+          setParsing(false);
+          setParseError(
+            'Lost the progress connection. The parse may still be running on the server — reopen to check.',
+          );
+        },
+      );
+    },
+    [project.id],
+  );
+
+  // On load, restore parse state the page was away for: re-attach to an
+  // in-flight parse job, or surface a finished-but-unapplied result. Both are
+  // server-side, so a reload mid-parse never loses anything.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const active = await api.script.parseActive(project.id);
+        if (!alive) return;
+        if (active && (active.status === 'running' || active.status === 'queued')) {
+          setParsing(true);
+          setParseJob(active);
+          trackParse(active.id);
+          return;
+        }
+        const pending = await api.script.parsed(project.id);
+        if (alive && pending) setParsed(pending);
+      } catch {
+        /* no pending parse, or project not yet loaded */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [project.id, trackParse]);
 
   const save = async () => {
     setSaving(true);
@@ -69,14 +130,17 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const parseScript = async () => {
     setParsing(true);
     setParseError(null);
+    setParsed(null);
+    setParseJob(null);
     setParseOpen(true);
     try {
-      const result = await api.script.parse(project.id);
-      setParsed(result);
+      // Parse runs server-side as a job; the result is persisted, so closing
+      // this dialog (or reloading) is safe — trackParse follows it over SSE.
+      const { jobId } = await api.script.parse(project.id);
+      trackParse(jobId);
     } catch (e) {
-      setParseError(e instanceof ApiClientError ? e.message : String(e));
-    } finally {
       setParsing(false);
+      setParseError(e instanceof ApiClientError ? e.message : String(e));
     }
   };
 
@@ -178,6 +242,16 @@ export function Overview({ project, onChanged }: OverviewProps) {
             <Sparkles className="h-4 w-4" />
             {parsing ? 'Parsing…' : 'Parse with AI'}
           </Button>
+          {parsing && (
+            <Button variant="secondary" onClick={() => setParseOpen(true)}>
+              <Sparkles className="h-4 w-4" /> View parse progress
+            </Button>
+          )}
+          {!parsing && parsed && (
+            <Button variant="secondary" onClick={() => setParseOpen(true)}>
+              <Sparkles className="h-4 w-4" /> Review pending parse
+            </Button>
+          )}
 
           <input
             ref={structuredInput}
@@ -252,6 +326,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
         applying={applying}
         error={parseError}
         onApply={(p) => void applyParsed(p)}
+        parsing={parsing}
+        progress={parseJob?.progress ?? 0}
+        progressMessage={parseJob?.message}
       />
     </div>
   );

@@ -2,10 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import type { ParsedScript } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
-import { parseScript } from '../services/ai.js';
-import { applyParsedScript, structuredImport } from '../services/script.js';
+import {
+  applyParsedScript,
+  getActiveParseJob,
+  getParsedScript,
+  startScriptParse,
+  structuredImport,
+} from '../services/script.js';
 import { readUpload } from '../lib/multipart.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest } from '../lib/errors.js';
 
 export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   // Upload a markdown screenplay (stored raw, not parsed).
@@ -26,15 +31,25 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, bytes: Buffer.byteLength(markdown) };
   });
 
-  // Parse the stored screenplay with AI into a ParsedScript.
-  app.post<{ Params: { id: string } }>('/projects/:id/script/parse', async (req) => {
-    const project = await getProject(req.params.id);
-    if (!(await fs.pathExists(fs.scriptFile(req.params.id)))) {
-      throw notFound('Stored screenplay');
-    }
-    const markdown = await fs.readText(fs.scriptFile(req.params.id));
-    return parseScript(project, markdown);
+  // Parse runs as a background job (it's a multi-minute LLM call). Returns a
+  // jobId; the client follows progress over the shared SSE jobs endpoint, then
+  // GETs /script/parsed for the result.
+  app.post<{ Params: { id: string } }>('/projects/:id/script/parse', async (req, reply) => {
+    const job = await startScriptParse(req.params.id);
+    return reply.code(202).send({ jobId: job.id, ...job });
   });
+
+  // The parse job currently running for this project, or null. Lets the UI
+  // re-attach to an in-flight parse after a reload lost the job id.
+  app.get<{ Params: { id: string } }>('/projects/:id/script/parse/active', async (req) =>
+    getActiveParseJob(req.params.id),
+  );
+
+  // The pending parsed-but-not-applied script, or null. Lets the UI restore the
+  // review/apply step after a reload while a parse was in flight.
+  app.get<{ Params: { id: string } }>('/projects/:id/script/parsed', async (req) =>
+    getParsedScript(req.params.id),
+  );
 
   // Apply a reviewed ParsedScript to the project.
   app.post<{ Params: { id: string }; Body: ParsedScript }>('/projects/:id/script/apply', async (req) => {

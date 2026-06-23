@@ -117,8 +117,19 @@ export const scriptApi = {
       body: form,
     });
   },
-  parse(projectId: string): Promise<ParsedScript> {
+  // Parse is a background job: returns a jobId to follow over SSE
+  // (assemblyApi.subscribeJob), then fetch the result with parsed().
+  parse(projectId: string): Promise<{ jobId: string }> {
     return request(`/projects/${projectId}/script/parse`, { method: 'POST' });
+  },
+  // The pending parsed-but-not-applied script, or null. Survives reloads.
+  parsed(projectId: string): Promise<ParsedScript | null> {
+    return request(`/projects/${projectId}/script/parsed`);
+  },
+  // The parse job currently running for this project, or null. Lets the UI
+  // re-attach to an in-flight parse after a reload.
+  parseActive(projectId: string): Promise<JobProgress | null> {
+    return request(`/projects/${projectId}/script/parse/active`);
   },
   apply(projectId: string, parsed: ParsedScript): Promise<ProjectDTO> {
     return request(`/projects/${projectId}/script/apply`, {

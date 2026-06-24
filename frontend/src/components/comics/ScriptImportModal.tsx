@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ParsedComicsScript } from '@mediagen/types';
 import {
   Dialog,
@@ -11,6 +11,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+export interface ParseLogEntry {
+  time: number;
+  message: string;
+}
+
 export interface ScriptImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,12 +27,42 @@ export interface ScriptImportModalProps {
   parsing?: boolean;
   progress?: number;
   progressMessage?: string;
+  parseLogs?: ParseLogEntry[];
 }
 
 /**
  * Review modal for an AI-parsed comics script. Shows the proposed characters
  * and pranchas/quadros before the user commits with "Aplicar".
  */
+function useElapsedSeconds(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef<number>(0);
+  useEffect(() => {
+    if (!active) { setElapsed(0); return; }
+    startRef.current = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return elapsed;
+}
+
+function fmtElapsed(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  const s = d.getSeconds().toString().padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
 export function ScriptImportModal({
   open,
   onOpenChange,
@@ -37,9 +72,15 @@ export function ScriptImportModal({
   onApply,
   parsing = false,
   progress = 0,
-  progressMessage,
+  parseLogs = [],
 }: ScriptImportModalProps) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  const elapsed = useElapsedSeconds(parsing);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [parseLogs]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -60,18 +101,31 @@ export function ScriptImportModal({
 
         {parsing && (
           <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Parseando roteiro com IA…</span>
+              <span className="tabular-nums">{fmtElapsed(elapsed)}</span>
+            </div>
             <div className="h-2 w-full overflow-hidden rounded bg-muted">
               <div
-                className="h-full bg-primary transition-all"
+                className="h-full bg-primary transition-all duration-500"
                 style={{ width: `${Math.round(progress * 100)}%` }}
               />
             </div>
-            <p className="text-sm text-muted-foreground">
-              {progressMessage ?? 'Parseando roteiro com a IA…'}
-            </p>
+            <div className="max-h-36 overflow-y-auto rounded border bg-muted/50 p-2 font-mono text-xs">
+              {parseLogs.length === 0 ? (
+                <p className="text-muted-foreground">Iniciando…</p>
+              ) : (
+                parseLogs.map((entry, i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="shrink-0 text-muted-foreground">{fmtTime(entry.time)}</span>
+                    <span>{entry.message}</span>
+                  </div>
+                ))
+              )}
+              <div ref={logEndRef} />
+            </div>
             <p className="text-xs text-muted-foreground">
-              Isso roda no servidor e pode levar alguns minutos. Você pode fechar
-              esta janela — o resultado fica guardado para revisar e aplicar.
+              Roda no servidor — fechar esta janela não cancela o parse.
             </p>
           </div>
         )}

@@ -37,11 +37,15 @@ export async function startScriptParse(projectId: string): Promise<JobProgress> 
   return jobQueue.start(
     'script-parse',
     async (handle) => {
-      handle.update(0.05, 'Lendo roteiro');
+      handle.update(0.05, 'Lendo roteiro…');
       const markdown = await fs.readText(cfs.scriptFile(projectId));
-      handle.update(0.15, 'Interpretando roteiro com o modelo (pode levar alguns minutos)');
-      const parsed = await parseComicsScript(project, markdown);
-      handle.update(0.95, 'Salvando resultado');
+      handle.update(0.15, 'Conectando ao modelo…');
+      const parsed = await parseComicsScript(project, markdown, (chars) => {
+        // Each call here is real: the model produced more output.
+        const kb = (chars / 1024).toFixed(1);
+        handle.update(0.20, `Recebendo resposta… ${kb} KB`);
+      });
+      handle.update(0.95, 'Salvando resultado…');
       await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
     },
     parseJobRef(projectId),

@@ -38,6 +38,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [parsed, setParsed] = useState<ParsedComicsScript | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseJob, setParseJob] = useState<JobProgress | null>(null);
+  const [parseLogs, setParseLogs] = useState<Array<{ time: number; message: string }>>([]);
   const [applying, setApplying] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -54,6 +55,13 @@ export function Overview({ project, onChanged }: OverviewProps) {
         jobId,
         (p) => {
           setParseJob(p);
+          // Append every distinct message to the rolling log (cap at 200).
+          setParseLogs((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.message === p.message) return prev;
+            const next = [...prev, { time: Date.now(), message: p.message }];
+            return next.length > 200 ? next.slice(-200) : next;
+          });
           if (p.status === 'done') {
             setParsing(false);
             void comicsApi.script
@@ -139,6 +147,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
     setParseError(null);
     setParsed(null);
     setParseJob(null);
+    setParseLogs([]);
     setParseOpen(true);
     try {
       // Parse runs server-side as a job; the result is persisted, so closing
@@ -371,6 +380,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
         parsing={parsing}
         progress={parseJob?.progress ?? 0}
         progressMessage={parseJob?.message}
+        parseLogs={parseLogs}
       />
     </div>
   );

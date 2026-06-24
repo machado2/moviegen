@@ -16,10 +16,20 @@ function requireKey(project: ComicsProject): string {
 // connection must not hang the job forever — cap it generously.
 const CHAT_TIMEOUT_MS = 8 * 60 * 1000;
 
-async function chat(apiKey: string, model: string, system: string, user: string): Promise<string> {
-  // One timeout covers the whole exchange — connecting AND reading the (large)
-  // response body. A slow model that dribbles the body must still be capped.
+// Called at most once per 500ms with the running character count of the
+// response body so far. Each call is proof of liveness — the model is still
+// producing output.
+type ChunkCallback = (charsReceived: number) => void;
+
+async function chat(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+  onChunk?: ChunkCallback,
+): Promise<string> {
   const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  const stream = onChunk !== undefined;
   try {
     const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
       method: 'POST',
@@ -37,16 +47,59 @@ async function chat(apiKey: string, model: string, system: string, user: string)
           { role: 'user', content: user },
         ],
         response_format: { type: 'json_object' },
+        stream,
       }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new HttpError(502, `OpenRouter request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
     }
-    const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-    const content = json.choices?.[0]?.message?.content;
-    if (!content) throw new HttpError(502, 'OpenRouter returned no content');
-    return content;
+
+    if (!stream) {
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const content = json.choices?.[0]?.message?.content;
+      if (!content) throw new HttpError(502, 'OpenRouter returned no content');
+      return content;
+    }
+
+    // Streaming: parse SSE lines, accumulate delta.content, call onChunk
+    // throttled to at most once per 500ms so we don't flood SSE.
+    if (!res.body) throw new HttpError(502, 'OpenRouter streaming response has no body');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulated = '';
+    let lastEmitAt = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        // OpenRouter keepalive comments start with `:` — skip them.
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        try {
+          const event = JSON.parse(raw) as { choices?: { delta?: { content?: string } }[] };
+          const delta = event.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string' && delta) {
+            accumulated += delta;
+            const now = Date.now();
+            if (now - lastEmitAt >= 500) {
+              lastEmitAt = now;
+              onChunk!(accumulated.length);
+            }
+          }
+        } catch { /* skip malformed SSE frames */ }
+      }
+    }
+
+    if (!accumulated) throw new HttpError(502, 'OpenRouter streaming returned no content');
+    return accumulated;
   } catch (err) {
     if (err instanceof HttpError) throw err;
     if (err instanceof Error && err.name === 'TimeoutError') {
@@ -106,6 +159,7 @@ interface ParsedComicsScript {
 export async function parseComicsScript(
   project: ComicsProject,
   scriptMarkdown: string,
+  onChunk?: ChunkCallback,
 ): Promise<ParsedComicsScript> {
   const apiKey = requireKey(project);
   const model = project.parseModel || DEFAULT_PARSE_MODEL;
@@ -114,6 +168,7 @@ export async function parseComicsScript(
     model,
     PARSE_SYSTEM_PROMPT,
     `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${scriptMarkdown}`,
+    onChunk,
   );
   let parsed: unknown;
   try {

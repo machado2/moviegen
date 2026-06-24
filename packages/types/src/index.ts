@@ -227,10 +227,23 @@ export interface MovieAssemblyStatus {
 
 // ─── API DTOs ───────────────────────────────────────────────────────────────
 
-// Project as exposed over the API: api key is redacted to a boolean.
+// Project as exposed over the API: the full api key never leaves the server,
+// only a boolean flag and a masked hint (last 4 chars) to identify it.
 export type ProjectDTO = Omit<Project, 'openrouterApiKey'> & {
   hasApiKey: boolean;
+  apiKeyHint: string | null;
 };
+
+/**
+ * Mask a secret down to an identifiable hint: the last 4 characters behind an
+ * ellipsis (e.g. `…a1b2`). Returns null when there's nothing to show. Short
+ * keys are fully masked so we never reveal most of a tiny secret.
+ */
+export function apiKeyHint(key: string | null | undefined): string | null {
+  if (!key) return null;
+  if (key.length <= 4) return '…' + '•'.repeat(key.length);
+  return '…' + key.slice(-4);
+}
 
 export interface ProjectSummary {
   id: string;

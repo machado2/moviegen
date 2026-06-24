@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JobProgress, ParsedScript, Project, ProjectDTO } from '@mediagen/types';
-import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
+import { Download, FileUp, KeyRound, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
     project.restrictions,
   );
   const [apiKey, setApiKey] = useState('');
+  const [editingKey, setEditingKey] = useState(false);
   const [parseModel, setParseModel] = useState(project.parseModel ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,6 +115,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
       }
       await api.projects.update(project.id, patch);
       setApiKey('');
+      setEditingKey(false);
       onChanged();
     } catch (e) {
       setSaveError(e instanceof ApiClientError ? e.message : String(e));
@@ -290,16 +292,50 @@ export function Overview({ project, onChanged }: OverviewProps) {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-1">
-            <Label htmlFor="apiKey">OpenRouter API key</Label>
-            <Input
-              id="apiKey"
-              type="password"
-              value={apiKey}
-              placeholder={
-                project.hasApiKey ? '•••••••• (leave blank to keep)' : 'sk-or-…'
-              }
-              onChange={(e) => setApiKey(e.target.value)}
-            />
+            <Label htmlFor={editingKey ? 'apiKey' : undefined}>
+              OpenRouter API key
+            </Label>
+            {editingKey ? (
+              <div className="flex gap-2">
+                <Input
+                  id="apiKey"
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={apiKey}
+                  placeholder={
+                    project.hasApiKey ? 'paste a new key' : 'sk-or-…'
+                  }
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingKey(false);
+                    setApiKey('');
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {project.hasApiKey && (
+                  <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
+                    {project.apiKeyHint ?? '••••'}
+                  </code>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingKey(true)}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  {project.hasApiKey ? 'Replace key' : 'Set key'}
+                </Button>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               Stored on the server, never returned to the browser.
             </p>

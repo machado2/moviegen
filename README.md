@@ -115,4 +115,5 @@ film projects at `data/projects/{id}`.
 ## API
 
 Base path `/api/v1`. See the API table in `SPEC.md`. Project API responses never
-include the OpenRouter key — only `hasApiKey: boolean`.
+include the OpenRouter key — only `hasApiKey: boolean` and a masked
+`apiKeyHint` (last 4 chars, e.g. `…a1b2`) to identify it.

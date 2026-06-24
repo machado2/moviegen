@@ -32,7 +32,11 @@ export function StringList({ items, placeholder, onChange }: StringListProps) {
     <div className="space-y-2">
       {items.map((item, i) => (
         <div key={i} className="flex gap-2">
-          <Input value={item} onChange={(e) => edit(i, e.target.value)} />
+          <Input
+            value={item}
+            autoComplete="off"
+            onChange={(e) => edit(i, e.target.value)}
+          />
           <Button
             type="button"
             variant="ghost"
@@ -47,6 +51,7 @@ export function StringList({ items, placeholder, onChange }: StringListProps) {
         <Input
           value={draft}
           placeholder={placeholder ?? 'Add item…'}
+          autoComplete="off"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {

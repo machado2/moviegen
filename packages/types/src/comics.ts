@@ -191,6 +191,7 @@ export interface MontagemOptions {
 
 export type ComicsProjectDTO = Omit<ComicsProject, 'openrouterApiKey'> & {
   hasApiKey: boolean;
+  apiKeyHint: string | null;
 };
 
 export interface ComicsProjectSummary {

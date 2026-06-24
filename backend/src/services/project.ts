@@ -1,4 +1,5 @@
 import type { CreateProjectInput, Project, ProjectDTO, ProjectSummary } from '@mediagen/types';
+import { apiKeyHint } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../lib/ids.js';
 import { DEFAULT_PARSE_MODEL, DEFAULT_TTS_MODEL } from '../config.js';
@@ -70,7 +71,11 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 /** Strip the API key before sending a project over the wire. */
 export function toDTO(project: Project): ProjectDTO {
   const { openrouterApiKey, ...rest } = project;
-  return { ...rest, hasApiKey: Boolean(openrouterApiKey) };
+  return {
+    ...rest,
+    hasApiKey: Boolean(openrouterApiKey),
+    apiKeyHint: apiKeyHint(openrouterApiKey),
+  };
 }
 
 export interface UpdateProjectInput {

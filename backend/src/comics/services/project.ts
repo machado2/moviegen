@@ -3,6 +3,7 @@ import type {
   ComicsProjectDTO,
   ComicsProjectSummary,
 } from '@mediagen/types';
+import { apiKeyHint } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../../lib/ids.js';
@@ -77,7 +78,11 @@ export async function listProjects(): Promise<ComicsProjectSummary[]> {
 
 export function toDTO(project: ComicsProject): ComicsProjectDTO {
   const { openrouterApiKey, ...rest } = project;
-  return { ...rest, hasApiKey: Boolean(openrouterApiKey) };
+  return {
+    ...rest,
+    hasApiKey: Boolean(openrouterApiKey),
+    apiKeyHint: apiKeyHint(openrouterApiKey),
+  };
 }
 
 export interface UpdateComicsProjectInput {

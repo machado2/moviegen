@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JobProgress, ParsedScript, Project, ProjectDTO } from '@mediagen/types';
-import { Download, FileUp, KeyRound, Save, Sparkles, Upload } from 'lucide-react';
+import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { StringList } from '@/components/StringList';
 import { ScriptImportModal } from '@/components/ScriptImportModal';
 import { api, ApiClientError } from '@/api/client';
@@ -23,9 +22,6 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [restrictions, setRestrictions] = useState<string[]>(
     project.restrictions,
   );
-  const [apiKey, setApiKey] = useState('');
-  const [editingKey, setEditingKey] = useState(false);
-  const [parseModel, setParseModel] = useState(project.parseModel ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -103,19 +99,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
     setSaving(true);
     setSaveError(null);
     try {
-      const patch: Partial<Project> = {
-        title,
-        globalStyle,
-        method,
-        restrictions,
-        parseModel: parseModel || undefined,
-      };
-      if (apiKey.trim()) {
-        patch.openrouterApiKey = apiKey.trim();
-      }
-      await api.projects.update(project.id, patch);
-      setApiKey('');
-      setEditingKey(false);
+      await api.projects.update(project.id, { title, globalStyle, method, restrictions });
       onChanged();
     } catch (e) {
       setSaveError(e instanceof ApiClientError ? e.message : String(e));
@@ -277,80 +261,6 @@ export function Overview({ project, onChanged }: OverviewProps) {
             onClick={() => void api.projects.export(project.id)}
           >
             <Download className="h-4 w-4" /> Export project ZIP
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            API key
-            <Badge variant={project.hasApiKey ? 'success' : 'warning'}>
-              {project.hasApiKey ? 'configured' : 'not set'}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor={editingKey ? 'apiKey' : undefined}>
-              OpenRouter API key
-            </Label>
-            {editingKey ? (
-              <div className="flex gap-2">
-                <Input
-                  id="apiKey"
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={apiKey}
-                  placeholder={
-                    project.hasApiKey ? 'paste a new key' : 'sk-or-…'
-                  }
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingKey(false);
-                    setApiKey('');
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {project.hasApiKey && (
-                  <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
-                    {project.apiKeyHint ?? '••••'}
-                  </code>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingKey(true)}
-                >
-                  <KeyRound className="h-4 w-4" />
-                  {project.hasApiKey ? 'Replace key' : 'Set key'}
-                </Button>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Stored on the server, never returned to the browser.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="parseModel">Parse model</Label>
-            <Input
-              id="parseModel"
-              value={parseModel}
-              placeholder="google/gemini-2.5-pro"
-              onChange={(e) => setParseModel(e.target.value)}
-            />
-          </div>
-          <Button onClick={() => void save()} disabled={saving}>
-            <Save className="h-4 w-4" /> Save API settings
           </Button>
         </CardContent>
       </Card>

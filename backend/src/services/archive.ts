@@ -18,9 +18,7 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   archive.on('error', (err) => out.destroy(err));
   archive.pipe(out);
 
-  // Redacted project.ncl (never export the key).
-  const redacted: Project = { ...project, openrouterApiKey: null };
-  archive.append(fs.toNickel(redacted), { name: 'project.ncl' });
+  archive.append(fs.toNickel(project), { name: 'project.ncl' });
 
   // script.md
   if (await fs.pathExists(fs.scriptFile(projectId))) {
@@ -92,7 +90,6 @@ export async function importProjectZip(buffer: Buffer): Promise<Project> {
     id: created.id,
     createdAt: created.createdAt,
     updatedAt: created.updatedAt,
-    openrouterApiKey: null,
   };
   const root = fs.projectDir(project.id);
 

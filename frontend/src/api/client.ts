@@ -14,6 +14,8 @@ import type {
   MovieAssemblyStatus,
   SceneAssemblyStatus,
   ApiError,
+  AppSettingsDTO,
+  AllProjectSummary,
 } from '@mediagen/types';
 
 const BASE = '/api/v1';
@@ -391,8 +393,28 @@ export const assemblyApi = {
   },
 };
 
+// ─── All projects (unified) ───────────────────────────────────────────────────
+
+export const allProjectsApi = {
+  list(): Promise<AllProjectSummary[]> {
+    return request('/all-projects');
+  },
+};
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+
+export const settingsApi = {
+  get(): Promise<AppSettingsDTO> {
+    return request('/settings');
+  },
+  update(patch: { openrouterApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }): Promise<AppSettingsDTO> {
+    return request('/settings', { method: 'PATCH', body: json(patch) });
+  },
+};
+
 export const api = {
   projects: projectsApi,
+  allProjects: allProjectsApi,
   script: scriptApi,
   characters: charactersApi,
   assets: assetsApi,
@@ -400,6 +422,7 @@ export const api = {
   shots: shotsApi,
   takes: takesApi,
   assembly: assemblyApi,
+  settings: settingsApi,
 };
 
 export default api;

@@ -3,14 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import type { ComicsProject, ParsedComicsScript } from '@mediagen/types';
-import { CODEX_BIN, DEFAULT_PARSE_MODEL, OPENROUTER_BASE } from '../../config.js';
-import { badRequest, HttpError } from '../../lib/errors.js';
+import { CODEX_BIN, OPENROUTER_BASE } from '../../config.js';
+import { HttpError } from '../../lib/errors.js';
+import { getAiConfig } from '../../services/settings.js';
 import { validateParsedComicsScript } from '../validate.js';
-
-function requireKey(project: ComicsProject): string {
-  if (!project.openrouterApiKey) throw badRequest('No OpenRouter API key configured for this project');
-  return project.openrouterApiKey;
-}
 
 // Parsing a long screenplay can legitimately take minutes, but a stalled
 // connection must not hang the job forever — cap it generously.
@@ -161,8 +157,7 @@ export async function parseComicsScript(
   scriptMarkdown: string,
   onChunk?: ChunkCallback,
 ): Promise<ParsedComicsScript> {
-  const apiKey = requireKey(project);
-  const model = project.parseModel || DEFAULT_PARSE_MODEL;
+  const { apiKey, parseModel: model } = await getAiConfig();
   const content = await chat(
     apiKey,
     model,

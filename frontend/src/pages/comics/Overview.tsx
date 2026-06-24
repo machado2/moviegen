@@ -5,13 +5,12 @@ import type {
   JobProgress,
   ParsedComicsScript,
 } from '@mediagen/types';
-import { Download, FileUp, KeyRound, Save, Sparkles, Upload } from 'lucide-react';
+import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { StringList } from '@/components/StringList';
 import { ScriptImportModal } from '@/components/comics/ScriptImportModal';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
@@ -28,9 +27,6 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [restrictions, setRestrictions] = useState<string[]>(
     project.restrictions,
   );
-  const [apiKey, setApiKey] = useState('');
-  const [editingKey, setEditingKey] = useState(false);
-  const [parseModel, setParseModel] = useState(project.parseModel ?? '');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -116,19 +112,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
     setSaving(true);
     setSaveError(null);
     try {
-      const patch: Partial<ComicsProject> = {
-        title,
-        language,
-        globalStyle,
-        restrictions,
-        parseModel: parseModel || undefined,
-      };
-      if (apiKey.trim()) {
-        patch.openrouterApiKey = apiKey.trim();
-      }
-      await comicsApi.projects.update(project.id, patch);
-      setApiKey('');
-      setEditingKey(false);
+      await comicsApi.projects.update(project.id, { title, language, globalStyle, restrictions });
       onChanged();
     } catch (e) {
       setSaveError(e instanceof ComicsApiError ? e.message : String(e));
@@ -292,80 +276,6 @@ export function Overview({ project, onChanged }: OverviewProps) {
             onClick={() => comicsApi.projects.export(project.id)}
           >
             <Download className="h-4 w-4" /> Exportar ZIP do projeto
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Chave de API
-            <Badge variant={project.hasApiKey ? 'success' : 'warning'}>
-              {project.hasApiKey ? 'configurada' : 'não definida'}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor={editingKey ? 'apiKey' : undefined}>
-              Chave OpenRouter
-            </Label>
-            {editingKey ? (
-              <div className="flex gap-2">
-                <Input
-                  id="apiKey"
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={apiKey}
-                  placeholder={
-                    project.hasApiKey ? 'cole uma nova chave' : 'sk-or-…'
-                  }
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setEditingKey(false);
-                    setApiKey('');
-                  }}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {project.hasApiKey && (
-                  <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
-                    {project.apiKeyHint ?? '••••'}
-                  </code>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingKey(true)}
-                >
-                  <KeyRound className="h-4 w-4" />
-                  {project.hasApiKey ? 'Trocar chave' : 'Definir chave'}
-                </Button>
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Armazenada no servidor, nunca retornada ao navegador.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="parseModel">Modelo de parse</Label>
-            <Input
-              id="parseModel"
-              value={parseModel}
-              placeholder="google/gemini-2.5-pro"
-              onChange={(e) => setParseModel(e.target.value)}
-            />
-          </div>
-          <Button onClick={() => void save()} disabled={saving}>
-            <Save className="h-4 w-4" /> Salvar configurações de API
           </Button>
         </CardContent>
       </Card>

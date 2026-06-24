@@ -35,7 +35,7 @@ export function Scenes({ project }: ScenesProps) {
   } = useScene(projectId, selectedSceneId);
 
   // The full Project (with assets map) is needed for prompt building.
-  const projectForPrompt: Project = { ...project, openrouterApiKey: null };
+  const projectForPrompt: Project = { ...project };
 
   const createScene = async () => {
     const number = scenes.length + 1;

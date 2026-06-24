@@ -17,8 +17,7 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   archive.on('error', (err) => out.destroy(err));
   archive.pipe(out);
 
-  const redacted: ComicsProject = { ...project, openrouterApiKey: null };
-  archive.append(fs.toNickel(redacted), { name: 'project.ncl' });
+  archive.append(fs.toNickel(project), { name: 'project.ncl' });
 
   if (await fs.pathExists(cfs.scriptFile(projectId))) {
     archive.file(cfs.scriptFile(projectId), { name: 'script.md' });
@@ -77,7 +76,6 @@ export async function importProjectZip(buffer: Buffer): Promise<ComicsProject> {
     id: created.id,
     createdAt: created.createdAt,
     updatedAt: created.updatedAt,
-    openrouterApiKey: null,
   };
   const root = cfs.projectDir(project.id);
   for (const e of entries) {

@@ -3,11 +3,9 @@ import type {
   ComicsProjectDTO,
   ComicsProjectSummary,
 } from '@mediagen/types';
-import { apiKeyHint } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../../lib/ids.js';
-import { DEFAULT_PARSE_MODEL } from '../../config.js';
 import { notFound } from '../../lib/errors.js';
 
 export interface CreateComicsProjectInput {
@@ -29,8 +27,6 @@ export async function createProject(input: CreateComicsProjectInput): Promise<Co
     restrictions: [],
     assets: {},
     pranchas: [],
-    openrouterApiKey: null,
-    parseModel: DEFAULT_PARSE_MODEL,
   };
   await fs.writeNickel(cfs.projectFile(id), project);
   await fs.ensureDir(cfs.pranchasDir(id));
@@ -77,12 +73,7 @@ export async function listProjects(): Promise<ComicsProjectSummary[]> {
 }
 
 export function toDTO(project: ComicsProject): ComicsProjectDTO {
-  const { openrouterApiKey, ...rest } = project;
-  return {
-    ...rest,
-    hasApiKey: Boolean(openrouterApiKey),
-    apiKeyHint: apiKeyHint(openrouterApiKey),
-  };
+  return project;
 }
 
 export interface UpdateComicsProjectInput {
@@ -90,8 +81,6 @@ export interface UpdateComicsProjectInput {
   language?: string;
   globalStyle?: string;
   restrictions?: string[];
-  parseModel?: string;
-  openrouterApiKey?: string | null;
 }
 
 export async function updateProject(
@@ -103,9 +92,5 @@ export async function updateProject(
   if (patch.language !== undefined) project.language = patch.language;
   if (patch.globalStyle !== undefined) project.globalStyle = patch.globalStyle;
   if (patch.restrictions !== undefined) project.restrictions = patch.restrictions;
-  if (patch.parseModel !== undefined) project.parseModel = patch.parseModel;
-  if (patch.openrouterApiKey !== undefined) {
-    project.openrouterApiKey = patch.openrouterApiKey ? patch.openrouterApiKey : null;
-  }
   return saveProject(project);
 }

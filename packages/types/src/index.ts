@@ -23,10 +23,6 @@ export interface Project {
   assets: Record<string, Asset>;
   scenes: SceneRef[];        // ordered index; each scene is a separate file
 
-  // AI configuration. The API key is never serialised back to the frontend.
-  openrouterApiKey?: string | null;
-  parseModel?: string;       // default: google/gemini-2.5-pro
-  ttsModel?: string;
 }
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
@@ -227,22 +223,23 @@ export interface MovieAssemblyStatus {
 
 // ─── API DTOs ───────────────────────────────────────────────────────────────
 
-// Project as exposed over the API: the full api key never leaves the server,
-// only a boolean flag and a masked hint (last 4 chars) to identify it.
-export type ProjectDTO = Omit<Project, 'openrouterApiKey'> & {
+export type ProjectDTO = Project;
+
+// ─── Global app settings ──────────────────────────────────────────────────────
+
+export interface AppSettingsDTO {
   hasApiKey: boolean;
   apiKeyHint: string | null;
-};
+  parseModel: string;
+  ttsModel: string;
+}
 
-/**
- * Mask a secret down to an identifiable hint: the last 4 characters behind an
- * ellipsis (e.g. `…a1b2`). Returns null when there's nothing to show. Short
- * keys are fully masked so we never reveal most of a tiny secret.
- */
-export function apiKeyHint(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.length <= 4) return '…' + '•'.repeat(key.length);
-  return '…' + key.slice(-4);
+export interface AllProjectSummary {
+  id: string;
+  title: string;
+  type: 'film' | 'comics';
+  language: string;
+  updatedAt: string;
 }
 
 export interface ProjectSummary {

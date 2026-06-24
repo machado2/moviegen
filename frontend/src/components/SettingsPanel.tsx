@@ -1,0 +1,170 @@
+import { useEffect, useState } from 'react';
+import { KeyRound, Save } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { useSettings } from '@/hooks/useSettings';
+import { ApiClientError } from '@/api/client';
+
+interface SettingsPanelProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
+  const { settings, update } = useSettings();
+  const [apiKey, setApiKey] = useState('');
+  const [editingKey, setEditingKey] = useState(false);
+  const [parseModel, setParseModel] = useState('');
+  const [ttsModel, setTtsModel] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setParseModel(settings.parseModel);
+      setTtsModel(settings.ttsModel);
+    }
+  }, [settings]);
+
+  const saveKey = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await update({ openrouterApiKey: apiKey.trim() || null });
+      setApiKey('');
+      setEditingKey(false);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clearKey = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await update({ openrouterApiKey: null });
+      setEditingKey(false);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveModels = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await update({
+        parseModel: parseModel.trim() || null,
+        ttsModel: ttsModel.trim() || null,
+      });
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Configurações globais</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6 pt-2">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label>Chave OpenRouter</Label>
+              {settings && (
+                <Badge variant={settings.hasApiKey ? 'success' : 'warning'}>
+                  {settings.hasApiKey ? 'configurada' : 'não definida'}
+                </Badge>
+              )}
+            </div>
+
+            {editingKey ? (
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={apiKey}
+                  placeholder={settings?.hasApiKey ? 'cole uma nova chave' : 'sk-or-…'}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <Button variant="ghost" onClick={() => { setEditingKey(false); setApiKey(''); }}>
+                  Cancelar
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {settings?.hasApiKey && (
+                  <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
+                    {settings.apiKeyHint ?? '••••'}
+                  </code>
+                )}
+                <Button variant="outline" onClick={() => setEditingKey(true)}>
+                  <KeyRound className="h-4 w-4" />
+                  {settings?.hasApiKey ? 'Trocar chave' : 'Definir chave'}
+                </Button>
+                {settings?.hasApiKey && (
+                  <Button variant="ghost" onClick={() => void clearKey()} disabled={saving}>
+                    Remover
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Usada por todos os projetos. Armazenada no servidor, nunca retornada ao navegador.
+            </p>
+
+            {editingKey && (
+              <Button onClick={() => void saveKey()} disabled={saving || !apiKey.trim()}>
+                <Save className="h-4 w-4" /> Salvar chave
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="parseModel">Modelo de parse</Label>
+              <Input
+                id="parseModel"
+                value={parseModel}
+                placeholder="google/gemini-2.5-pro"
+                onChange={(e) => setParseModel(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ttsModel">Modelo de voz (TTS)</Label>
+              <Input
+                id="ttsModel"
+                value={ttsModel}
+                placeholder="openai/gpt-4o-mini-tts"
+                onChange={(e) => setTtsModel(e.target.value)}
+              />
+            </div>
+            <Button onClick={() => void saveModels()} disabled={saving}>
+              <Save className="h-4 w-4" /> Salvar modelos
+            </Button>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

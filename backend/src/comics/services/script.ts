@@ -160,8 +160,6 @@ export async function structuredImport(projectId: string, payload: unknown): Pro
     id: existing.id,
     createdAt: existing.createdAt,
     updatedAt: existing.updatedAt,
-    openrouterApiKey: existing.openrouterApiKey ?? null,
-    parseModel: incoming.parseModel ?? existing.parseModel,
   };
 
   await fs.remove(cfs.pranchasDir(projectId));

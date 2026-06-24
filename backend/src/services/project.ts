@@ -1,8 +1,6 @@
 import type { CreateProjectInput, Project, ProjectDTO, ProjectSummary } from '@mediagen/types';
-import { apiKeyHint } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { newId, nowIso, slugify } from '../lib/ids.js';
-import { DEFAULT_PARSE_MODEL, DEFAULT_TTS_MODEL } from '../config.js';
 import { notFound } from '../lib/errors.js';
 
 export async function createProject(input: CreateProjectInput): Promise<Project> {
@@ -20,9 +18,6 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
     restrictions: [],
     assets: {},
     scenes: [],
-    openrouterApiKey: null,
-    parseModel: DEFAULT_PARSE_MODEL,
-    ttsModel: DEFAULT_TTS_MODEL,
   };
   await fs.writeNickel(fs.projectFile(id), project);
   await fs.ensureDir(fs.scenesDir(id));
@@ -68,14 +63,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return summaries;
 }
 
-/** Strip the API key before sending a project over the wire. */
 export function toDTO(project: Project): ProjectDTO {
-  const { openrouterApiKey, ...rest } = project;
-  return {
-    ...rest,
-    hasApiKey: Boolean(openrouterApiKey),
-    apiKeyHint: apiKeyHint(openrouterApiKey),
-  };
+  return project;
 }
 
 export interface UpdateProjectInput {
@@ -84,9 +73,6 @@ export interface UpdateProjectInput {
   globalStyle?: string;
   method?: string[];
   restrictions?: string[];
-  parseModel?: string;
-  ttsModel?: string;
-  openrouterApiKey?: string | null;
 }
 
 export async function updateProject(id: string, patch: UpdateProjectInput): Promise<Project> {
@@ -96,11 +82,5 @@ export async function updateProject(id: string, patch: UpdateProjectInput): Prom
   if (patch.globalStyle !== undefined) project.globalStyle = patch.globalStyle;
   if (patch.method !== undefined) project.method = patch.method;
   if (patch.restrictions !== undefined) project.restrictions = patch.restrictions;
-  if (patch.parseModel !== undefined) project.parseModel = patch.parseModel;
-  if (patch.ttsModel !== undefined) project.ttsModel = patch.ttsModel;
-  // Empty string clears the key; undefined leaves it untouched.
-  if (patch.openrouterApiKey !== undefined) {
-    project.openrouterApiKey = patch.openrouterApiKey ? patch.openrouterApiKey : null;
-  }
   return saveProject(project);
 }

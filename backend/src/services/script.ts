@@ -174,15 +174,12 @@ export async function structuredImport(projectId: string, payload: unknown): Pro
     throw badRequest('Scene JSON does not match the current format', sceneErrors.slice(0, 30));
   }
 
-  // Replace structure but preserve identity and secrets of the target project.
+  // Replace structure but preserve identity of the target project.
   const project: Project = {
     ...incoming,
     id: existing.id,
     createdAt: existing.createdAt,
     updatedAt: existing.updatedAt,
-    openrouterApiKey: existing.openrouterApiKey ?? null,
-    parseModel: incoming.parseModel ?? existing.parseModel,
-    ttsModel: incoming.ttsModel ?? existing.ttsModel,
   };
 
   // Reset scene files, then write the imported ones.

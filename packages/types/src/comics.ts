@@ -18,9 +18,6 @@ export interface ComicsProject {
   assets: Record<string, ComicsAsset>;
   pranchas: PranchaRef[];    // ordered index; each prancha is a separate file
 
-  // AI config. The key is never serialised back to the frontend.
-  openrouterApiKey?: string | null;
-  parseModel?: string;       // default: google/gemini-2.5-pro
 }
 
 // ─── Assets ───────────────────────────────────────────────────────────────────
@@ -189,10 +186,7 @@ export interface MontagemOptions {
 
 // ─── DTOs / derived views ─────────────────────────────────────────────────────
 
-export type ComicsProjectDTO = Omit<ComicsProject, 'openrouterApiKey'> & {
-  hasApiKey: boolean;
-  apiKeyHint: string | null;
-};
+export type ComicsProjectDTO = ComicsProject;
 
 export interface ComicsProjectSummary {
   id: string;

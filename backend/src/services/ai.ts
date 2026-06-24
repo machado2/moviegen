@@ -1,14 +1,8 @@
 import type { ParsedScript, Project } from '@mediagen/types';
-import { DEFAULT_PARSE_MODEL, OPENROUTER_BASE } from '../config.js';
-import { badRequest, HttpError } from '../lib/errors.js';
+import { OPENROUTER_BASE } from '../config.js';
+import { HttpError } from '../lib/errors.js';
+import { getAiConfig } from '../services/settings.js';
 import { validateParsedScript } from '../lib/validate.js';
-
-function requireKey(project: Project): string {
-  if (!project.openrouterApiKey) {
-    throw badRequest('No OpenRouter API key configured for this project');
-  }
-  return project.openrouterApiKey;
-}
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -116,8 +110,7 @@ interface ParsedScript {
 }`;
 
 export async function parseScript(project: Project, scriptMarkdown: string): Promise<ParsedScript> {
-  const apiKey = requireKey(project);
-  const model = project.parseModel || DEFAULT_PARSE_MODEL;
+  const { apiKey, parseModel: model } = await getAiConfig();
   const content = await chat(
     apiKey,
     model,
@@ -151,8 +144,7 @@ export async function generateImagePrompt(
   subject: string,
   kind: 'character' | 'location',
 ): Promise<string> {
-  const apiKey = requireKey(project);
-  const model = project.parseModel || DEFAULT_PARSE_MODEL;
+  const { apiKey, parseModel: model } = await getAiConfig();
   const style = project.globalStyle ? `Global visual style: ${project.globalStyle}\n` : '';
   const content = await chat(apiKey, model, [
     {

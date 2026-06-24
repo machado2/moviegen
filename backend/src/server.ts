@@ -11,6 +11,8 @@ import { HttpError } from './lib/errors.js';
 import type { ApiError } from '@mediagen/types';
 
 import { projectRoutes } from './routes/projects.js';
+import { settingsRoutes } from './routes/settings.js';
+import { allProjectsRoutes } from './routes/allProjects.js';
 import { scriptRoutes } from './routes/scripts.js';
 import { characterRoutes } from './routes/characters.js';
 import { assetRoutes } from './routes/assets.js';
@@ -56,6 +58,8 @@ async function buildServer() {
   await app.register(
     async (api) => {
       await api.register(projectRoutes);
+      await api.register(settingsRoutes);
+      await api.register(allProjectsRoutes);
       await api.register(scriptRoutes);
       await api.register(characterRoutes);
       await api.register(assetRoutes);

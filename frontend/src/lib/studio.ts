@@ -36,8 +36,11 @@ export interface StudioItem {
   getAttachments: () => StudioAttachment[];
   /** Save a produced result (image blob wrapped as File, or a video File). */
   submit: (file: File) => Promise<void>;
-  /** Optional API generation. Returns a jobId to follow, or resolves directly. */
-  apiGenerate?: () => Promise<{ jobId: string } | void>;
+  /**
+   * Optional API generation. Returns a jobId to follow, or resolves directly.
+   * `opts.model` is the image model id the user picked in the Estúdio (gateway).
+   */
+  apiGenerate?: (opts?: { model?: string }) => Promise<{ jobId: string } | void>;
   /** Follow an API job to completion (resolves when done, rejects on error). */
   followJob?: (jobId: string) => Promise<void>;
   /** Persist the skipped flag for this unit. */

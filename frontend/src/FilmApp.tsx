@@ -13,6 +13,7 @@ import {
 import { useProject } from '@/hooks/useProject';
 import { useFilmStudioItems } from '@/hooks/useStudioQueue';
 import { useSpend } from '@/hooks/useSpend';
+import { useSettings } from '@/hooks/useSettings';
 import { Overview } from '@/pages/Overview';
 import { Assets } from '@/pages/Assets';
 import { Scenes } from '@/pages/Scenes';
@@ -67,6 +68,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
   const { items, loading: queueLoading, reload: reloadQueue } = useFilmStudioItems(projectId, onChanged);
   const fetchSpend = useCallback(() => api.projects.spend(projectId), [projectId]);
   const { spend, reload: reloadSpend } = useSpend(fetchSpend);
+  const { settings } = useSettings();
   // Keep the Pipeline's cost figure current when returning to it (e.g. after a parse).
   useEffect(() => {
     if (tab === 'pipeline') void reloadSpend();
@@ -108,6 +110,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
               initialFocusKey={studioFocus}
               spend={spend}
               fetchSpend={fetchSpend}
+              imageModels={settings?.imageModels ?? []}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}

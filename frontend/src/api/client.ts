@@ -25,6 +25,7 @@ export interface SettingsPatch {
   parseModel?: string | null;
   ttsModel?: string | null;
   spendCapUsd?: number | null;
+  imageModels?: string[] | null;
 }
 
 const BASE = '/api/v1';

@@ -10,6 +10,7 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       parseModel?: string | null;
       ttsModel?: string | null;
       spendCapUsd?: number | null;
+      imageModels?: string[] | null;
     };
   }>('/settings', async (req) => {
     return updateSettings(req.body ?? {});

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { StringList } from '@/components/StringList';
 import { useSettings } from '@/hooks/useSettings';
 import { ApiClientError } from '@/api/client';
 
@@ -25,6 +26,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [parseModel, setParseModel] = useState('');
   const [ttsModel, setTtsModel] = useState('');
   const [spendCap, setSpendCap] = useState('');
+  const [imageModels, setImageModels] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setParseModel(settings.parseModel);
       setTtsModel(settings.ttsModel);
       setSpendCap(settings.spendCapUsd != null ? String(settings.spendCapUsd) : '');
+      setImageModels(settings.imageModels);
     }
   }, [settings]);
 
@@ -75,6 +78,16 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveImageModels = async (next: string[]) => {
+    setImageModels(next);
+    setError(null);
+    try {
+      await update({ imageModels: next });
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
     }
   };
 
@@ -184,6 +197,19 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             <Button onClick={() => void saveModels()} disabled={saving}>
               <Save className="h-4 w-4" /> Salvar modelos
             </Button>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modelos de imagem (gateway)</Label>
+            <StringList
+              items={imageModels}
+              placeholder="ex.: gpt-image-1, gemini-2.5-flash-image…"
+              onChange={(next) => void saveImageModels(next)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Ids de modelo de geração de imagem roteados pelo gateway LiteLLM. O Estúdio deixa
+              escolher qual usar por geração; o primeiro é o padrão. Salva automaticamente.
+            </p>
           </div>
 
           <div className="space-y-2">

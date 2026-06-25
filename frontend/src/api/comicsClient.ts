@@ -384,10 +384,11 @@ export const comicsRendersApi = {
     projectId: string,
     pranchaId: string,
     quadroId: string,
+    opts?: { model?: string; useCodex?: boolean },
   ): Promise<{ jobId: string }> {
     return request(
       `/projects/${projectId}/pranchas/${pranchaId}/quadros/${quadroId}/renders/generate`,
-      { method: 'POST' },
+      { method: 'POST', body: json(opts ?? {}) },
     );
   },
   imageUrl(

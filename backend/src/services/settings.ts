@@ -11,12 +11,28 @@ interface Settings {
   parseModel?: string;
   ttsModel?: string;
   spendCapUsd?: number | null;
+  imageModels?: string[];
 }
 
 /** Normalize a spend cap: a finite, non-negative number, else null (no cap). */
 function normalizeCap(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;
   return value;
+}
+
+/** Clean an image-model list: trimmed, non-empty, de-duplicated, order kept. */
+function normalizeImageModels(value: string[] | null | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of value) {
+    const m = String(raw).trim();
+    if (m && !seen.has(m)) {
+      seen.add(m);
+      out.push(m);
+    }
+  }
+  return out;
 }
 
 /** Resolved gateway key: the deploy-injected env wins, else the stored one. */
@@ -46,6 +62,7 @@ export async function getSettings(): Promise<AppSettingsDTO> {
     parseModel: s.parseModel || DEFAULT_PARSE_MODEL,
     ttsModel: s.ttsModel || DEFAULT_TTS_MODEL,
     spendCapUsd: normalizeCap(s.spendCapUsd),
+    imageModels: normalizeImageModels(s.imageModels),
   };
 }
 
@@ -54,6 +71,7 @@ export async function getAiConfig(): Promise<{
   parseModel: string;
   ttsModel: string;
   spendCapUsd: number | null;
+  imageModels: string[];
 }> {
   const s = await read();
   const apiKey = resolveApiKey(s.llmApiKey);
@@ -65,6 +83,7 @@ export async function getAiConfig(): Promise<{
     parseModel: s.parseModel || DEFAULT_PARSE_MODEL,
     ttsModel: s.ttsModel || DEFAULT_TTS_MODEL,
     spendCapUsd: normalizeCap(s.spendCapUsd),
+    imageModels: normalizeImageModels(s.imageModels),
   };
 }
 
@@ -78,12 +97,17 @@ export async function updateSettings(patch: {
   parseModel?: string | null;
   ttsModel?: string | null;
   spendCapUsd?: number | null;
+  imageModels?: string[] | null;
 }): Promise<AppSettingsDTO> {
   const s = await read();
   if (patch.llmApiKey !== undefined) s.llmApiKey = patch.llmApiKey || null;
   if (patch.parseModel !== undefined) s.parseModel = patch.parseModel || undefined;
   if (patch.ttsModel !== undefined) s.ttsModel = patch.ttsModel || undefined;
   if (patch.spendCapUsd !== undefined) s.spendCapUsd = normalizeCap(patch.spendCapUsd);
+  if (patch.imageModels !== undefined) {
+    const list = normalizeImageModels(patch.imageModels);
+    s.imageModels = list.length ? list : undefined;
+  }
   await fs.writeNickel(SETTINGS_FILE, s);
   return getSettings();
 }

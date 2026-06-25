@@ -13,6 +13,9 @@ import { getPrancha, listPranchaRefs } from './prancha.js';
 import { addRender } from './render.js';
 import { buildQuadroPrompt, promptAttachmentIds } from './prompt.js';
 import { generateFrame } from './ai.js';
+import { generateImageViaGateway } from '../../services/imagegen.js';
+import { getAiConfig } from '../../services/settings.js';
+import { assertUnderCap, recordSpend } from '../../services/spend.js';
 import { montagePrancha } from '../assembly/montagem.js';
 import { buildCbz, buildPdfEpub } from '../assembly/book.js';
 import { jobQueue } from '../../jobs/queue.js';
@@ -154,10 +157,18 @@ export async function startBookAssembly(
   });
 }
 
+export interface RenderGenerationOptions {
+  /** Image model id to route through the gateway. Defaults to the first configured one. */
+  model?: string;
+  /** Opt in to the local codex CLI instead of the gateway (manual/offline only). */
+  useCodex?: boolean;
+}
+
 export async function startRenderGeneration(
   projectId: string,
   pranchaId: string,
   quadroId: string,
+  opts: RenderGenerationOptions = {},
 ): Promise<JobProgress> {
   const project = await getProject(projectId);
   const prancha = await getPrancha(projectId, pranchaId);
@@ -171,16 +182,47 @@ export async function startRenderGeneration(
     if (asset?.file) attachmentPaths.push(cfs.resolveInProject(projectId, asset.file));
   }
 
+  const dir = cfs.projectDir(projectId);
+
+  // Local codex CLI: explicit, manual/offline opt-in only — never the default.
+  if (opts.useCodex) {
+    return jobQueue.start('render-generate', async (handle) => {
+      handle.update(0.1, 'Gerando quadro via codex (local)…');
+      const { png } = await generateFrame(prompt, attachmentPaths);
+      handle.update(0.85, 'Salvando render…');
+      await addRender(projectId, pranchaId, quadroId, {
+        data: png,
+        originalName: 'render.png',
+        source: 'generated',
+        generationPrompt: prompt,
+        generationModel: 'codex',
+      });
+      handle.update(1, 'Render gerado');
+    });
+  }
+
+  // Default: the LiteLLM gateway with a configured image model.
+  const { apiKey, spendCapUsd, imageModels } = await getAiConfig();
+  const model = opts.model || imageModels[0];
+  if (!model) {
+    throw badRequest(
+      'Nenhum modelo de imagem configurado. Adicione um id de modelo (ex.: gpt-image-1) em Configurações ou use a opção manual via codex.',
+    );
+  }
+  await assertUnderCap(dir, spendCapUsd);
+
   return jobQueue.start('render-generate', async (handle) => {
-    handle.update(0.1, 'Generating frame via codex…');
-    const { png } = await generateFrame(prompt, attachmentPaths);
-    handle.update(0.85, 'Storing render…');
+    handle.update(0.1, `Gerando quadro via ${model}…`);
+    const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt, attachmentPaths });
+    await recordSpend(dir, spend);
+    handle.update(0.85, 'Salvando render…');
     await addRender(projectId, pranchaId, quadroId, {
       data: png,
       originalName: 'render.png',
       source: 'generated',
       generationPrompt: prompt,
+      generationModel: model,
     });
-    handle.update(1, 'Render generated');
+    handle.update(1, 'Render gerado');
   });
 }

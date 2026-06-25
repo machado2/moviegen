@@ -238,7 +238,7 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
           submit: async (file) => {
             await comicsApi.renders.upload(projectId, prancha.id, quadro.id, file);
           },
-          apiGenerate: () => comicsApi.renders.generate(projectId, prancha.id, quadro.id),
+          apiGenerate: (opts) => comicsApi.renders.generate(projectId, prancha.id, quadro.id, { model: opts?.model }),
           followJob: (jobId) => followComicsJob(projectId, jobId),
         });
       }

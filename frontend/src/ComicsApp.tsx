@@ -13,6 +13,7 @@ import {
 import { useComicsProject } from '@/hooks/comics/useComicsProject';
 import { useComicsStudioItems } from '@/hooks/useStudioQueue';
 import { useSpend } from '@/hooks/useSpend';
+import { useSettings } from '@/hooks/useSettings';
 import { Overview } from '@/pages/comics/Overview';
 import { Assets } from '@/pages/comics/Assets';
 import { Pranchas } from '@/pages/comics/Pranchas';
@@ -67,6 +68,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
   const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(projectId, onChanged);
   const fetchSpend = useCallback(() => comicsApi.projects.spend(projectId), [projectId]);
   const { spend, reload: reloadSpend } = useSpend(fetchSpend);
+  const { settings } = useSettings();
   // Keep the Pipeline's cost figure current when returning to it (e.g. after a parse).
   useEffect(() => {
     if (tab === 'pipeline') void reloadSpend();
@@ -108,6 +110,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
               initialFocusKey={studioFocus}
               spend={spend}
               fetchSpend={fetchSpend}
+              imageModels={settings?.imageModels ?? []}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}

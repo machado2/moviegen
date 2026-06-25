@@ -130,6 +130,7 @@ export interface Render {
   heightPx: number | null;
   source: 'generated' | 'upload';
   generationPrompt?: string;   // full prompt sent to the generator
+  generationModel?: string;    // image model id used (gateway), or "codex" for the local CLI
   notes?: string;
 }
 

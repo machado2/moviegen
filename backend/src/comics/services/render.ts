@@ -22,6 +22,7 @@ export interface AddRenderInput {
   originalName: string;
   source: 'generated' | 'upload';
   generationPrompt?: string;
+  generationModel?: string;
   notes?: string;
 }
 
@@ -59,6 +60,7 @@ export async function addRender(
     heightPx,
     source: input.source,
     generationPrompt: input.generationPrompt,
+    generationModel: input.generationModel,
     notes: input.notes,
   };
   quadro.renders.push(render);

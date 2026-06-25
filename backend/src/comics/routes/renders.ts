@@ -32,11 +32,15 @@ export async function comicsRenderRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Generate a render via AI (codex image_gen). Returns a job id; runs async.
-  app.post<{ Params: QuadroParams }>(
+  // Generate a render via the LiteLLM gateway (default) or the local codex CLI
+  // (only when useCodex is set). Returns a job id; runs async.
+  app.post<{ Params: QuadroParams; Body: { model?: string; useCodex?: boolean } }>(
     '/projects/:id/pranchas/:pranchaId/quadros/:quadroId/renders/generate',
     async (req, reply) => {
-      const job = await startRenderGeneration(req.params.id, req.params.pranchaId, req.params.quadroId);
+      const job = await startRenderGeneration(req.params.id, req.params.pranchaId, req.params.quadroId, {
+        model: req.body?.model,
+        useCodex: req.body?.useCodex,
+      });
       return reply.code(202).send({ jobId: job.id, ...job });
     },
   );

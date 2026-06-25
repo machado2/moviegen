@@ -241,6 +241,8 @@ export interface AppSettingsDTO {
   ttsModel: string;
   /** Spend ceiling in USD that pauses API-mode generation when a project reaches it. Null = no cap. */
   spendCapUsd: number | null;
+  /** Image-generation model ids the gateway can route (e.g. "gpt-image-1"); user-chosen per generation. */
+  imageModels: string[];
 }
 
 // ─── Spend tracking ─────────────────────────────────────────────────────────

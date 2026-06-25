@@ -75,6 +75,10 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         setPriority: async (p) => {
           await api.assets.update(projectId, asset.id, { queuePriority: p });
         },
+        description: asset.description,
+        setDescription: async (d) => {
+          await api.assets.update(projectId, asset.id, { description: d });
+        },
         getPrompt: async () =>
           [
             isLocation
@@ -175,6 +179,10 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
         },
         setPriority: async (p) => {
           await comicsApi.assets.update(projectId, asset.id, { queuePriority: p });
+        },
+        description: asset.characterDescription,
+        setDescription: async (d) => {
+          await comicsApi.assets.update(projectId, asset.id, { characterDescription: d });
         },
         getPrompt: async () =>
           [

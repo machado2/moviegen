@@ -13,11 +13,11 @@ import {
 import { useProject } from '@/hooks/useProject';
 import { useFilmStudioItems } from '@/hooks/useStudioQueue';
 import { Overview } from '@/pages/Overview';
-import { Characters } from '@/pages/Characters';
 import { Assets } from '@/pages/Assets';
 import { Scenes } from '@/pages/Scenes';
 import { Assembly } from '@/pages/Assembly';
 import { Estudio } from '@/components/Estudio';
+import { ElencoCenarios } from '@/components/ElencoCenarios';
 import { Storyboard } from '@/components/Storyboard';
 import { Pipeline } from '@/components/Pipeline';
 import { History } from '@/components/History';
@@ -41,7 +41,7 @@ const NAV: NavItem[] = [
   { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
   { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
   { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
-  { id: 'characters', label: 'Personagens', icon: <Users className={ic} /> },
+  { id: 'characters', label: 'Elenco', icon: <Users className={ic} /> },
   { id: 'assets', label: 'Assets', icon: <ImageIcon className={ic} /> },
   { id: 'scenes', label: 'Cenas', icon: <Film className={ic} /> },
   { id: 'assembly', label: 'Montagem', icon: <Clapperboard className={ic} /> },
@@ -101,7 +101,9 @@ export function FilmApp({ projectId }: FilmAppProps) {
             />
           ))}
         {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onProduce={produce} />}
-        {tab === 'characters' && <Characters projectId={project.id} />}
+        {tab === 'characters' && (
+          <ElencoCenarios items={items} loading={queueLoading} onProduce={produce} onRefresh={reloadQueue} />
+        )}
         {tab === 'assets' && <Assets projectId={project.id} />}
         {tab === 'scenes' && <Scenes project={project} />}
         {tab === 'assembly' && <Assembly projectId={project.id} />}

@@ -44,6 +44,10 @@ export interface StudioItem {
   setSkipped: (skipped: boolean) => Promise<void>;
   /** Persist a manual queue-ordering value for this unit. */
   setPriority: (priority: number) => Promise<void>;
+  /** Canonical description (references only) — feeds the prompt; editable in Elenco. */
+  description?: string;
+  /** Persist an edited canonical description (references only). */
+  setDescription?: (description: string) => Promise<void>;
 }
 
 /**

@@ -13,11 +13,11 @@ import {
 import { useComicsProject } from '@/hooks/comics/useComicsProject';
 import { useComicsStudioItems } from '@/hooks/useStudioQueue';
 import { Overview } from '@/pages/comics/Overview';
-import { Characters } from '@/pages/comics/Characters';
 import { Assets } from '@/pages/comics/Assets';
 import { Pranchas } from '@/pages/comics/Pranchas';
 import { Publication } from '@/pages/comics/Publication';
 import { Estudio } from '@/components/Estudio';
+import { ElencoCenarios } from '@/components/ElencoCenarios';
 import { Storyboard } from '@/components/Storyboard';
 import { Pipeline } from '@/components/Pipeline';
 import { History } from '@/components/History';
@@ -41,7 +41,7 @@ const NAV: NavItem[] = [
   { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
   { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
   { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
-  { id: 'characters', label: 'Personagens', icon: <Users className={ic} /> },
+  { id: 'characters', label: 'Elenco', icon: <Users className={ic} /> },
   { id: 'assets', label: 'Assets', icon: <ImageIcon className={ic} /> },
   { id: 'pranchas', label: 'Pranchas', icon: <BookOpen className={ic} /> },
   { id: 'publication', label: 'Publicação', icon: <BookMarked className={ic} /> },
@@ -101,7 +101,9 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
             />
           ))}
         {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onProduce={produce} />}
-        {tab === 'characters' && <Characters projectId={project.id} />}
+        {tab === 'characters' && (
+          <ElencoCenarios items={items} loading={queueLoading} onProduce={produce} onRefresh={reloadQueue} />
+        )}
         {tab === 'assets' && <Assets projectId={project.id} />}
         {tab === 'pranchas' && <Pranchas project={project} />}
         {tab === 'publication' && <Publication projectId={project.id} />}

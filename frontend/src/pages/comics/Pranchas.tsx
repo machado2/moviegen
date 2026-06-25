@@ -32,12 +32,17 @@ import { PromptPreviewModal } from '@/components/comics/PromptPreviewModal';
 import { RenderViewer } from '@/components/comics/RenderViewer';
 import { AssemblyProgress } from '@/components/comics/AssemblyProgress';
 import { usePranchas, usePrancha } from '@/hooks/comics/usePrancha';
+import type { StudioItem } from '@/lib/studio';
 import { PRANCHA_LAYOUTS } from '@/lib/comicsLayout';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
 import { cn } from '@/lib/utils';
 
 export interface PranchasProps {
   project: ComicsProjectDTO;
+  /** Project production queue, to open a quadro's generation workbench. */
+  studioItems?: StudioItem[];
+  /** Open the generation modal for a unit. */
+  onGenerate?: (item: StudioItem) => void;
 }
 
 const SLOT_FORMAT_BY_LAYOUT: Record<PranchaLayout, QuadroSlotFormat> = {
@@ -51,7 +56,7 @@ const SLOT_FORMAT_BY_LAYOUT: Record<PranchaLayout, QuadroSlotFormat> = {
   'top-then-grid-2x2': 'horizontal panorâmico, proporção 2:1',
 };
 
-export function Pranchas({ project }: PranchasProps) {
+export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
   const projectId = project.id;
   const { pranchas, loading: listLoading, reload: reloadList } =
     usePranchas(projectId);
@@ -301,6 +306,16 @@ export function Pranchas({ project }: PranchasProps) {
                         onUpdate={updateQuadro}
                         onDelete={(quadroId) => void deleteQuadro(quadroId)}
                         onChanged={() => void reloadPrancha()}
+                        onOpenStudio={
+                          onGenerate && studioItems
+                            ? () => {
+                                const it = studioItems.find(
+                                  (s) => s.key === `quadro:${prancha.id}:${q.id}`,
+                                );
+                                if (it) onGenerate(it);
+                              }
+                            : undefined
+                        }
                       />
                     </div>
                   ))}

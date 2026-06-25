@@ -8,8 +8,8 @@ import type { StudioItem } from '@/lib/studio';
 export interface ElencoCenariosProps {
   items: StudioItem[];
   loading: boolean;
-  /** Open the Estúdio focused on this unit. */
-  onProduce: (key: string) => void;
+  /** Open the generation workbench (modal) for this unit. */
+  onGenerate: (item: StudioItem) => void;
   /** Re-fetch after an edit persists. */
   onRefresh: () => void | Promise<void>;
 }
@@ -79,13 +79,13 @@ function Card({ item, onProduce, onRefresh }: { item: StudioItem; onProduce: () 
       )}
 
       <Button variant="outline" size="sm" onClick={onProduce} className="gap-1 self-start">
-        <Wand2 className="h-3.5 w-3.5" /> {item.done ? 'Refazer no Estúdio' : 'Produzir'}
+        <Wand2 className="h-3.5 w-3.5" /> {item.done ? 'Refazer' : 'Gerar'}
       </Button>
     </div>
   );
 }
 
-function Section({ title, items, onProduce, onRefresh }: { title: string; items: StudioItem[]; onProduce: (k: string) => void; onRefresh: () => void | Promise<void> }) {
+function Section({ title, items, onGenerate, onRefresh }: { title: string; items: StudioItem[]; onGenerate: (i: StudioItem) => void; onRefresh: () => void | Promise<void> }) {
   if (items.length === 0) return null;
   const done = items.filter((i) => i.done).length;
   return (
@@ -95,14 +95,14 @@ function Section({ title, items, onProduce, onRefresh }: { title: string; items:
       </h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((it) => (
-          <Card key={it.key} item={it} onProduce={() => onProduce(it.key)} onRefresh={onRefresh} />
+          <Card key={it.key} item={it} onProduce={() => onGenerate(it)} onRefresh={onRefresh} />
         ))}
       </div>
     </div>
   );
 }
 
-export function ElencoCenarios({ items, loading, onProduce, onRefresh }: ElencoCenariosProps) {
+export function ElencoCenarios({ items, loading, onGenerate, onRefresh }: ElencoCenariosProps) {
   const personagens = useMemo(() => items.filter((i) => i.kind === 'character'), [items]);
   const cenarios = useMemo(() => items.filter((i) => i.kind === 'location'), [items]);
 
@@ -117,8 +117,8 @@ export function ElencoCenarios({ items, loading, onProduce, onRefresh }: ElencoC
 
   return (
     <div className="space-y-6">
-      <Section title="Personagens" items={personagens} onProduce={onProduce} onRefresh={onRefresh} />
-      <Section title="Cenários" items={cenarios} onProduce={onProduce} onRefresh={onRefresh} />
+      <Section title="Personagens" items={personagens} onGenerate={onGenerate} onRefresh={onRefresh} />
+      <Section title="Cenários" items={cenarios} onGenerate={onGenerate} onRefresh={onRefresh} />
     </div>
   );
 }

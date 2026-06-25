@@ -8,6 +8,7 @@ import {
   Star,
   Trash2,
   Upload,
+  Wand2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,8 @@ export interface QuadroCardProps {
   onUpdate: (quadroId: string, patch: Partial<Quadro>) => Promise<void>;
   onDelete: (quadroId: string) => void;
   onChanged: () => void;
+  /** Open the full generation workbench (modal) for this quadro, if available. */
+  onOpenStudio?: () => void;
 }
 
 export function QuadroCard({
@@ -60,6 +63,7 @@ export function QuadroCard({
   onUpdate,
   onDelete,
   onChanged,
+  onOpenStudio,
 }: QuadroCardProps) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -255,10 +259,16 @@ export function QuadroCard({
         {genError && <p className="text-xs text-destructive">{genError}</p>}
 
         <div className="flex flex-wrap gap-2 border-t pt-2">
-          <Button size="sm" disabled={generating} onClick={() => void generate()}>
-            <Sparkles className="h-3 w-3" />
-            {generating ? 'Gerando…' : 'Gerar Render'}
-          </Button>
+          {onOpenStudio ? (
+            <Button size="sm" onClick={onOpenStudio}>
+              <Wand2 className="h-3 w-3" /> Gerar no Estúdio
+            </Button>
+          ) : (
+            <Button size="sm" disabled={generating} onClick={() => void generate()}>
+              <Sparkles className="h-3 w-3" />
+              {generating ? 'Gerando…' : 'Gerar Render'}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"

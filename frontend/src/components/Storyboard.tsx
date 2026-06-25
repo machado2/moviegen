@@ -6,8 +6,8 @@ import type { StudioItem } from '@/lib/studio';
 export interface StoryboardProps {
   items: StudioItem[];
   loading: boolean;
-  /** Jump to this unit in the Estúdio (produce / redo). */
-  onProduce: (key: string) => void;
+  /** Open the generation workbench (modal) for this unit. */
+  onGenerate: (item: StudioItem) => void;
 }
 
 function Cell({ item, onProduce, onView }: { item: StudioItem; onProduce: () => void; onView: () => void }) {
@@ -49,7 +49,7 @@ function Cell({ item, onProduce, onView }: { item: StudioItem; onProduce: () => 
   );
 }
 
-function Section({ title, items, onProduce, onView }: { title: string; items: StudioItem[]; onProduce: (k: string) => void; onView: (i: StudioItem) => void }) {
+function Section({ title, items, onGenerate, onView }: { title: string; items: StudioItem[]; onGenerate: (i: StudioItem) => void; onView: (i: StudioItem) => void }) {
   if (items.length === 0) return null;
   const done = items.filter((i) => i.done).length;
   return (
@@ -59,14 +59,14 @@ function Section({ title, items, onProduce, onView }: { title: string; items: St
       </h3>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
         {items.map((it) => (
-          <Cell key={it.key} item={it} onProduce={() => onProduce(it.key)} onView={() => onView(it)} />
+          <Cell key={it.key} item={it} onProduce={() => onGenerate(it)} onView={() => onView(it)} />
         ))}
       </div>
     </div>
   );
 }
 
-export function Storyboard({ items, loading, onProduce }: StoryboardProps) {
+export function Storyboard({ items, loading, onGenerate }: StoryboardProps) {
   const [view, setView] = useState<{ url: string; label: string } | null>(null);
   const refs = useMemo(() => items.filter((i) => i.kind === 'character' || i.kind === 'location'), [items]);
   const units = useMemo(() => items.filter((i) => i.kind === 'shot' || i.kind === 'quadro'), [items]);
@@ -86,8 +86,8 @@ export function Storyboard({ items, loading, onProduce }: StoryboardProps) {
 
   return (
     <div className="space-y-6">
-      <Section title="Personagens & Cenários" items={refs} onProduce={onProduce} onView={onView} />
-      <Section title="Sequência" items={units} onProduce={onProduce} onView={onView} />
+      <Section title="Personagens & Cenários" items={refs} onGenerate={onGenerate} onView={onView} />
+      <Section title="Sequência" items={units} onGenerate={onGenerate} onView={onView} />
 
       {view && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={() => setView(null)}>

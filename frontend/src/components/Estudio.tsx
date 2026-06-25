@@ -42,21 +42,57 @@ export interface EstudioProps {
   fetchSpend?: () => Promise<SpendDTO>;
   /** Image-generation model ids (from Settings) the user can pick for API mode. */
   imageModels?: string[];
+  /**
+   * Embedded mode: a single-item generation workbench (used inside the
+   * GenerateModal). Hides the queue rail, scope selector and queue navigation.
+   */
+  embedded?: boolean;
 }
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 60));
 
-export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend, imageModels = [] }: EstudioProps) {
-  const items = useMemo(() => orderStudioItems(rawItems), [rawItems]);
+export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend, imageModels = [], embedded = false }: EstudioProps) {
+  const allItems = useMemo(() => orderStudioItems(rawItems), [rawItems]);
+
+  // Sequence groups (scenes/pranchas) so a long queue can be produced one at a
+  // time. References (no group) are always shown alongside the chosen group.
+  const groups = useMemo(() => {
+    const byId = new Map<string, NonNullable<StudioItem['group']>>();
+    for (const it of allItems) if (it.group) byId.set(it.group.id, it.group);
+    return [...byId.values()].sort((a, b) => a.order - b.order);
+  }, [allItems]);
+  const groupNoun = allItems.some((i) => i.kind === 'quadro')
+    ? 'Prancha'
+    : allItems.some((i) => i.kind === 'shot')
+      ? 'Cena'
+      : 'Grupo';
+
+  // Selected scope: a group id, or 'all'. Null = follow the default (the focused
+  // item's group, else the first group). Picking from the selector pins it.
+  const [scopeId, setScopeId] = useState<string | null>(null);
+  const focusGroupId = initialFocusKey
+    ? allItems.find((i) => i.key === initialFocusKey)?.group?.id
+    : undefined;
+  const scope = scopeId ?? focusGroupId ?? groups[0]?.id ?? 'all';
+
+  // The scoped view the queue/loop operate on: references + the chosen group.
+  const items = useMemo(
+    () => allItems.filter((i) => !i.group || scope === 'all' || i.group.id === scope),
+    [allItems, scope],
+  );
   const itemsRef = useRef(items);
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
   const [focusKey, setFocusKey] = useState<string | null>(initialFocusKey ?? null);
-  // Honor an externally-requested focus (e.g. "produzir este" from the Storyboard).
+  // Honor an externally-requested focus (e.g. "produzir este" from the Storyboard);
+  // also unpin the scope so the view jumps to that item's group.
   useEffect(() => {
-    if (initialFocusKey) setFocusKey(initialFocusKey);
+    if (initialFocusKey) {
+      setFocusKey(initialFocusKey);
+      setScopeId(null);
+    }
   }, [initialFocusKey]);
   const [prompt, setPrompt] = useState<string>('');
   const [promptLoading, setPromptLoading] = useState(false);
@@ -344,7 +380,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     setApiRunning(false);
   }, []);
 
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
         {emptyHint ?? 'Nada para produzir ainda. Carregue e parseie um roteiro primeiro.'}
@@ -364,10 +400,15 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
             {current?.sublabel && <span className="text-muted-foreground">· {current.sublabel}</span>}
           </div>
           <p className="text-xs text-muted-foreground">
-            {doneCount}/{items.length} prontos · {pendingCount} na fila
-            {skippedCount > 0 && ` · ${skippedCount} pulados`}
-            {sessionCount > 0 && ` · ${sessionCount} gerados nesta sessão`}
-            {' · '}custo IA: {spendLabel(spend)}
+            {!embedded && (
+              <>
+                {doneCount}/{items.length} prontos · {pendingCount} na fila
+                {skippedCount > 0 && ` · ${skippedCount} pulados`}
+                {sessionCount > 0 && ` · ${sessionCount} gerados nesta sessão`}
+                {' · '}
+              </>
+            )}
+            custo IA: {spendLabel(spend)}
             {spend?.capUsd != null && ` / $${spend.capUsd.toFixed(2)}`}
           </p>
         </div>
@@ -391,6 +432,24 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           )}
         </div>
       </div>
+
+      {/* Scope selector: produce one scene/prancha at a time (refs always shown) */}
+      {!embedded && groups.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{groupNoun}:</span>
+          <select
+            value={scope}
+            onChange={(e) => setScopeId(e.target.value)}
+            className="h-9 max-w-[20rem] rounded-md border bg-background px-2 text-sm"
+          >
+            <option value="all">Todas ({groups.length})</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.label}</option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">· referências sempre visíveis</span>
+        </div>
+      )}
 
       <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
@@ -547,7 +606,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           {/* manual nav */}
-          {!apiRunning && current && (
+          {!embedded && !apiRunning && current && (
             <div className="flex flex-wrap items-center gap-1">
               {current.skipped ? (
                 <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} disabled={busy} className="gap-1">
@@ -591,6 +650,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       </div>
 
       {/* Queue rail */}
+      {!embedded && (
       <div className="space-y-1">
         <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fila</h4>
         <div className="flex flex-wrap gap-1">
@@ -617,6 +677,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           ))}
         </div>
       </div>
+      )}
 
       {/* Last-pasted corner */}
       {last && (

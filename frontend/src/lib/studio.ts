@@ -20,6 +20,12 @@ export interface StudioItem {
   label: string;
   /** Secondary label, e.g. "Cena 3 · Shot 2". */
   sublabel?: string;
+  /**
+   * Sequence grouping (scene for film, prancha for comics) used to scope the
+   * Estúdio queue to one page/scene at a time. References (characters/locations)
+   * have no group and are always shown.
+   */
+  group?: { id: string; label: string; order: number };
   /** Result channel: paste an image, or upload a video file. */
   accepts: 'image' | 'video';
   /** Whether this unit already has a selected result. */

@@ -23,7 +23,9 @@ import { ElencoCenarios } from '@/components/ElencoCenarios';
 import { Storyboard } from '@/components/Storyboard';
 import { Pipeline } from '@/components/Pipeline';
 import { History } from '@/components/History';
+import { GenerateModal } from '@/components/GenerateModal';
 import { ProjectShell, type NavItem } from '@/components/ProjectShell';
+import type { StudioItem } from '@/lib/studio';
 import { comicsApi } from '@/api/comicsClient';
 
 type Tab =
@@ -56,13 +58,10 @@ interface ComicsAppProps {
 
 export function ComicsApp({ projectId }: ComicsAppProps) {
   const [tab, setTab] = useState<Tab>('pipeline');
-  const [studioFocus, setStudioFocus] = useState<string | undefined>(undefined);
+  // The unit currently open in the generation modal (from Storyboard/Elenco/Pranchas).
+  const [genItem, setGenItem] = useState<StudioItem | null>(null);
   const { project, reload: reloadProject } = useComicsProject(projectId);
   const onChanged = useCallback(() => void reloadProject(), [reloadProject]);
-  const produce = useCallback((key: string) => {
-    setStudioFocus(key);
-    setTab('studio');
-  }, []);
   const loadHistory = useCallback(() => comicsApi.projects.history(projectId), [projectId]);
   const restoreHistory = useCallback((hash: string) => comicsApi.projects.restore(projectId, hash), [projectId]);
   const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(projectId, onChanged);
@@ -80,6 +79,11 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
     void reloadQueue();
     void reloadSpend();
   }, [onChanged, reloadQueue, reloadSpend]);
+  // After a result is saved/generated in the modal, refresh queue + spend.
+  const genRefresh = useCallback(async () => {
+    await reloadQueue();
+    await reloadSpend();
+  }, [reloadQueue, reloadSpend]);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
@@ -107,23 +111,31 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
             <Estudio
               items={items}
               onRefresh={reloadQueue}
-              initialFocusKey={studioFocus}
               spend={spend}
               fetchSpend={fetchSpend}
               imageModels={settings?.imageModels ?? []}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}
-        {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onProduce={produce} />}
+        {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onGenerate={setGenItem} />}
         {tab === 'characters' && (
-          <ElencoCenarios items={items} loading={queueLoading} onProduce={produce} onRefresh={reloadQueue} />
+          <ElencoCenarios items={items} loading={queueLoading} onGenerate={setGenItem} onRefresh={reloadQueue} />
         )}
         {tab === 'assets' && <Assets projectId={project.id} />}
-        {tab === 'pranchas' && <Pranchas project={project} />}
+        {tab === 'pranchas' && <Pranchas project={project} studioItems={items} onGenerate={setGenItem} />}
         {tab === 'publication' && <Publication projectId={project.id} />}
         {tab === 'history' && (
           <History load={loadHistory} restore={restoreHistory} onRestored={afterRestore} />
         )}
+        <GenerateModal
+          open={genItem != null}
+          onOpenChange={(o) => { if (!o) setGenItem(null); }}
+          item={genItem}
+          onRefresh={genRefresh}
+          imageModels={settings?.imageModels ?? []}
+          spend={spend}
+          fetchSpend={fetchSpend}
+        />
       </>
     </ProjectShell>
   );

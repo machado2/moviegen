@@ -265,6 +265,22 @@ export interface SpendDTO {
   capReached: boolean;
 }
 
+// One model the gateway can route, surfaced for search/validation in Settings.
+// Derived from the upstream catalog (the gateway forwards to OpenRouter).
+export interface ModelCatalogEntry {
+  id: string;
+  name: string;
+  inputModalities: string[];   // e.g. ["text","image"]
+  outputModalities: string[];  // e.g. ["text"] or ["image"]
+  contextLength: number | null;
+  pricing: {
+    prompt: number | null;      // USD per input token
+    completion: number | null;  // USD per output token
+    image: number | null;       // USD per output image, when applicable
+    request: number | null;     // USD per request, when applicable
+  };
+}
+
 export interface AllProjectSummary {
   id: string;
   title: string;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Save } from 'lucide-react';
+import type { ModelCatalogEntry } from '@mediagen/types';
+import { KeyRound, Plus, Save, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,9 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { StringList } from '@/components/StringList';
+import { ModelCombobox } from '@/components/ModelCombobox';
 import { useSettings } from '@/hooks/useSettings';
-import { ApiClientError } from '@/api/client';
+import { api, ApiClientError } from '@/api/client';
 
 interface SettingsPanelProps {
   open: boolean;
@@ -27,6 +28,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [ttsModel, setTtsModel] = useState('');
   const [spendCap, setSpendCap] = useState('');
   const [imageModels, setImageModels] = useState<string[]>([]);
+  const [imgDraft, setImgDraft] = useState('');
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +41,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setImageModels(settings.imageModels);
     }
   }, [settings]);
+
+  // Load the searchable model catalog when the panel opens (best-effort: the
+  // fields stay usable as free text if the upstream catalog can't be reached).
+  useEffect(() => {
+    if (!open || catalog.length > 0) return;
+    void api.models.catalog().then(setCatalog).catch(() => setCatalog([]));
+  }, [open, catalog.length]);
 
   const saveKey = async () => {
     setSaving(true);
@@ -90,6 +100,14 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     }
   };
+
+  const addImageModel = () => {
+    const m = imgDraft.trim();
+    setImgDraft('');
+    if (!m || imageModels.includes(m)) return;
+    void saveImageModels([...imageModels, m]);
+  };
+  const removeImageModel = (m: string) => void saveImageModels(imageModels.filter((x) => x !== m));
 
   const saveCap = async () => {
     setSaving(true);
@@ -178,20 +196,24 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
           <div className="space-y-3">
             <div className="space-y-1">
               <Label htmlFor="parseModel">Modelo de parse</Label>
-              <Input
+              <ModelCombobox
                 id="parseModel"
                 value={parseModel}
-                placeholder="google/gemini-2.5-pro"
-                onChange={(e) => setParseModel(e.target.value)}
+                onChange={setParseModel}
+                purpose="text"
+                catalog={catalog}
+                placeholder="busque ou cole um id (ex.: google/gemini-2.5-pro)"
               />
             </div>
             <div className="space-y-1">
               <Label htmlFor="ttsModel">Modelo de voz (TTS)</Label>
-              <Input
+              <ModelCombobox
                 id="ttsModel"
                 value={ttsModel}
-                placeholder="openai/gpt-4o-mini-tts"
-                onChange={(e) => setTtsModel(e.target.value)}
+                onChange={setTtsModel}
+                purpose="audio"
+                catalog={catalog}
+                placeholder="busque ou cole um id (ex.: openai/gpt-4o-mini-tts)"
               />
             </div>
             <Button onClick={() => void saveModels()} disabled={saving}>
@@ -201,14 +223,44 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
           <div className="space-y-2">
             <Label>Modelos de imagem (gateway)</Label>
-            <StringList
-              items={imageModels}
-              placeholder="ex.: gpt-image-1, gemini-2.5-flash-image…"
-              onChange={(next) => void saveImageModels(next)}
-            />
+            {imageModels.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {imageModels.map((m, i) => (
+                  <li key={m}>
+                    <span className="inline-flex items-center gap-1 rounded border bg-muted/40 py-0.5 pl-2 pr-1 text-xs font-mono">
+                      {i === 0 && <span className="font-sans text-[10px] text-primary" title="padrão no Estúdio">padrão</span>}
+                      {m}
+                      <button
+                        type="button"
+                        onClick={() => removeImageModel(m)}
+                        className="rounded p-0.5 hover:bg-muted"
+                        title="Remover"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <ModelCombobox
+                  value={imgDraft}
+                  onChange={setImgDraft}
+                  purpose="image"
+                  catalog={catalog}
+                  placeholder="busque um modelo de imagem (ou cole id + params, ex.: …image-2 quality=low)"
+                />
+              </div>
+              <Button variant="outline" onClick={addImageModel} disabled={!imgDraft.trim()} className="shrink-0">
+                <Plus className="h-4 w-4" /> Adicionar
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Ids de modelo de geração de imagem roteados pelo gateway LiteLLM. O Estúdio deixa
-              escolher qual usar por geração; o primeiro é o padrão. Salva automaticamente.
+              Modelos de geração de imagem roteados pelo gateway. O Estúdio deixa escolher qual usar
+              por geração; o primeiro da lista é o padrão. Salva automaticamente. Pode adicionar
+              params depois do id (ex.: <code className="font-mono">quality=low</code>).
             </p>
           </div>
 

@@ -17,6 +17,7 @@ import type {
   AppSettingsDTO,
   AllProjectSummary,
   SpendDTO,
+  ModelCatalogEntry,
 } from '@mediagen/types';
 
 /** Patch shape for global settings updates (shared by film + comics UIs). */
@@ -442,6 +443,12 @@ export const settingsApi = {
   },
 };
 
+export const modelsApi = {
+  catalog(): Promise<ModelCatalogEntry[]> {
+    return request('/models/catalog');
+  },
+};
+
 export const api = {
   projects: projectsApi,
   allProjects: allProjectsApi,
@@ -453,6 +460,7 @@ export const api = {
   takes: takesApi,
   assembly: assemblyApi,
   settings: settingsApi,
+  models: modelsApi,
 };
 
 export default api;

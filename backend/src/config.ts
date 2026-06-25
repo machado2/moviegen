@@ -35,6 +35,13 @@ export const LLM_BASE_URL = (process.env.LLM_BASE_URL ?? 'https://llm.fbmac.net/
 // empty, falls back to the key stored via Settings.
 export const LLM_API_KEY = process.env.LLM_API_KEY ?? '';
 
+// Upstream model catalog for search/validation in Settings. The gateway is a
+// wildcard proxy that can't enumerate models, but it forwards to OpenRouter,
+// whose public catalog lists ids, modalities and pricing. Overridable if the
+// gateway's upstream ever changes.
+export const MODELS_CATALOG_URL =
+  process.env.MODELS_CATALOG_URL ?? 'https://openrouter.ai/api/v1/models';
+
 // Maximum shot duration in seconds — the natural limit of current AI video models.
 export const MAX_SHOT_SECONDS = 15;
 

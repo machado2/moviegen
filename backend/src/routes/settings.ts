@@ -1,8 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { getSettings, updateSettings } from '../services/settings.js';
+import { getModelCatalog } from '../services/catalog.js';
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   app.get('/settings', async () => getSettings());
+
+  // Searchable model catalog for the Settings UI (cached upstream list).
+  app.get('/models/catalog', async () => getModelCatalog());
 
   app.patch<{
     Body: {

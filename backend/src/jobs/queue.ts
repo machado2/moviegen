@@ -15,6 +15,8 @@ import { loadAllJobs, persistJob, removeJob } from './store.js';
 export interface JobHandle {
   id: string;
   update(progress: number, message: string): void;
+  /** Aborts when the job is cancelled; pass to long-running fetches. */
+  signal: AbortSignal;
 }
 
 type Runner = (handle: JobHandle) => Promise<void>;
@@ -31,6 +33,9 @@ class JobQueue {
   // its currently-active (queued/running) job, so callers can dedupe and the
   // UI can re-attach to an in-flight job after a reload lost the job id.
   private activeByRef = new Map<string, string>();
+  // Per-job abort controllers, so cancel() can interrupt in-flight work (e.g. a
+  // long LLM fetch). Dropped when the job reaches a terminal state.
+  private controllers = new Map<string, AbortController>();
   private emitter = new EventEmitter();
 
   constructor() {
@@ -100,15 +105,19 @@ class JobQueue {
     };
     this.jobs.set(id, job);
     if (ref) this.activeByRef.set(ref, id);
+    const controller = new AbortController();
+    this.controllers.set(id, controller);
     this.persist(job);
     this.emit(job);
 
-    const clearRef = () => {
+    const cleanup = () => {
       if (ref && this.activeByRef.get(ref) === id) this.activeByRef.delete(ref);
+      this.controllers.delete(id);
     };
 
     const handle: JobHandle = {
       id,
+      signal: controller.signal,
       update: (progress, message) => {
         const j = this.jobs.get(id);
         if (!j || isTerminal(j)) return;
@@ -131,27 +140,53 @@ class JobQueue {
       try {
         await runner(handle);
         const done = this.jobs.get(id)!;
-        done.status = 'done';
-        done.progress = 1;
-        done.message = 'Complete';
-        done.updatedAt = nowIso();
-        clearRef();
-        this.persist(done);
-        this.emit(done);
+        // cancel() may have raced in and already marked it terminal — respect that.
+        if (!isTerminal(done)) {
+          done.status = 'done';
+          done.progress = 1;
+          done.message = 'Complete';
+          done.updatedAt = nowIso();
+          cleanup();
+          this.persist(done);
+          this.emit(done);
+        }
       } catch (err) {
         const failed = this.jobs.get(id)!;
-        failed.status = 'error';
-        failed.message = 'Failed';
-        failed.error = err instanceof Error ? err.message : String(err);
-        failed.updatedAt = nowIso();
-        clearRef();
-        this.persist(failed);
-        this.emit(failed);
+        // If cancel() already set the terminal "Cancelado" state, don't clobber it.
+        if (!isTerminal(failed)) {
+          failed.status = 'error';
+          failed.message = 'Failed';
+          failed.error = err instanceof Error ? err.message : String(err);
+          failed.updatedAt = nowIso();
+          cleanup();
+          this.persist(failed);
+          this.emit(failed);
+        }
       }
       void this.sweep();
     });
 
     return job;
+  }
+
+  /**
+   * Cancel a queued/running job: abort its in-flight work and mark it terminal
+   * ("Cancelado"). No-op if the job is unknown or already finished. Returns
+   * whether a cancellation actually happened.
+   */
+  cancel(id: string): boolean {
+    const job = this.jobs.get(id);
+    if (!job || isTerminal(job)) return false;
+    this.controllers.get(id)?.abort();
+    for (const [ref, jid] of this.activeByRef) if (jid === id) this.activeByRef.delete(ref);
+    this.controllers.delete(id);
+    job.status = 'error';
+    job.message = 'Cancelado';
+    job.error = 'Cancelado pelo usuário';
+    job.updatedAt = nowIso();
+    this.persist(job);
+    this.emit(job);
+    return true;
   }
 
   /** Fire-and-forget journal write; persistence must never break a job. */

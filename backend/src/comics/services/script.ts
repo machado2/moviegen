@@ -40,16 +40,28 @@ export async function startScriptParse(projectId: string): Promise<JobProgress> 
       handle.update(0.05, 'Lendo roteiro…');
       const markdown = await fs.readText(cfs.scriptFile(projectId));
       handle.update(0.15, 'Conectando ao modelo…');
-      const parsed = await parseComicsScript(project, markdown, (chars) => {
-        // Each call here is real: the model produced more output.
-        const kb = (chars / 1024).toFixed(1);
-        handle.update(0.20, `Recebendo resposta… ${kb} KB`);
-      });
+      const parsed = await parseComicsScript(
+        project,
+        markdown,
+        (chars) => {
+          // Each call here is real: the model produced more output.
+          const kb = (chars / 1024).toFixed(1);
+          handle.update(0.20, `Recebendo resposta… ${kb} KB`);
+        },
+        handle.signal,
+      );
       handle.update(0.95, 'Salvando resultado…');
       await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
     },
     parseJobRef(projectId),
   );
+}
+
+/** Cancel the in-flight parse for a project, if any. Returns whether it cancelled. */
+export async function cancelScriptParse(projectId: string): Promise<boolean> {
+  await getProject(projectId);
+  const job = jobQueue.findActiveByRef(parseJobRef(projectId));
+  return job ? jobQueue.cancel(job.id) : false;
 }
 
 /** The parse job currently running for this project, or null. */

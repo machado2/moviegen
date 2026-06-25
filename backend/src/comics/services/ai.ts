@@ -46,8 +46,10 @@ async function chat(
   system: string,
   user: string,
   onChunk?: ChunkCallback,
+  externalSignal?: AbortSignal,
 ): Promise<ChatResult> {
-  const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  const signal = externalSignal ? AbortSignal.any([timeout, externalSignal]) : timeout;
   const stream = onChunk !== undefined;
   try {
     const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
@@ -193,6 +195,7 @@ export async function parseComicsScript(
   project: ComicsProject,
   scriptMarkdown: string,
   onChunk?: ChunkCallback,
+  signal?: AbortSignal,
 ): Promise<ParsedComicsScript> {
   const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
   const dir = projectDir(project.id);
@@ -203,6 +206,7 @@ export async function parseComicsScript(
     PARSE_SYSTEM_PROMPT,
     `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${scriptMarkdown}`,
     onChunk,
+    signal,
   );
   await recordSpend(dir, spend);
   let parsed: unknown;

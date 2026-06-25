@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ComicsProjectDTO, JobProgress, ParsedComicsScript } from '@mediagen/types';
-import { Download, Save, Sparkles, Upload } from 'lucide-react';
+import { Download, Save, Sparkles, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { StringList } from '@/components/StringList';
 import { ScriptUpload } from '@/components/ScriptUpload';
+import { useSettings } from '@/hooks/useSettings';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
 
 export interface OverviewProps {
@@ -26,6 +34,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [parsing, setParsing] = useState(false);
   const [parseJob, setParseJob] = useState<JobProgress | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [confirmParse, setConfirmParse] = useState(false);
+  const [aborting, setAborting] = useState(false);
+  const { settings } = useSettings();
 
   // Apply a finished parse automatically and commit it (git history is the
   // review mechanism — no confirmation popup), then refresh the project.
@@ -114,6 +125,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
   };
 
   const parseScript = async () => {
+    setConfirmParse(false);
     setParsing(true);
     setParseError(null);
     setParseJob(null);
@@ -123,6 +135,17 @@ export function Overview({ project, onChanged }: OverviewProps) {
     } catch (e) {
       setParsing(false);
       setParseError(e instanceof ComicsApiError ? e.message : String(e));
+    }
+  };
+
+  const abortParse = async () => {
+    setAborting(true);
+    try {
+      await comicsApi.script.cancelParse(project.id);
+    } catch (e) {
+      setParseError(e instanceof ComicsApiError ? e.message : String(e));
+    } finally {
+      setAborting(false);
     }
   };
 
@@ -175,7 +198,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
                 <Upload className="h-4 w-4" /> Carregar roteiro
               </Button>
             </ScriptUpload>
-            <Button onClick={() => void parseScript()} disabled={parsing}>
+            <Button onClick={() => setConfirmParse(true)} disabled={parsing}>
               <Sparkles className="h-4 w-4" />
               {parsing ? 'Parseando…' : 'Parsear com IA'}
             </Button>
@@ -192,9 +215,14 @@ export function Overview({ project, onChanged }: OverviewProps) {
                   style={{ width: `${Math.round((parseJob?.progress ?? 0) * 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                {parseJob?.message ?? 'Parseando o roteiro…'} — aplica e versiona automaticamente ao terminar.
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {parseJob?.message ?? 'Parseando o roteiro…'} — aplica e versiona automaticamente ao terminar.
+                </p>
+                <Button variant="destructive" size="sm" onClick={() => void abortParse()} disabled={aborting} className="gap-1 shrink-0">
+                  <X className="h-3.5 w-3.5" /> {aborting ? 'Abortando…' : 'Abortar'}
+                </Button>
+              </div>
             </div>
           )}
           {parseError && <p className="text-sm text-destructive">{parseError}</p>}
@@ -203,6 +231,30 @@ export function Overview({ project, onChanged }: OverviewProps) {
           </p>
         </CardContent>
       </Card>
+
+      <Dialog open={confirmParse} onOpenChange={setConfirmParse}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Parsear roteiro com IA?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>
+              Isso faz uma chamada de IA (uma, não em loop) e pode custar, conforme o modelo.
+              Você pode abortar enquanto roda.
+            </p>
+            <p className="text-muted-foreground">
+              Modelo de parse: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{settings?.parseModel ?? '—'}</code>
+              {' '}· muda em Configurações.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmParse(false)}>Cancelar</Button>
+            <Button onClick={() => void parseScript()}>
+              <Sparkles className="h-4 w-4" /> Parsear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

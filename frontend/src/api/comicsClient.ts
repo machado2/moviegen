@@ -167,6 +167,9 @@ export const comicsScriptApi = {
   parseActive(projectId: string): Promise<JobProgress | null> {
     return request(`/projects/${projectId}/script/parse/active`);
   },
+  cancelParse(projectId: string): Promise<{ cancelled: boolean }> {
+    return request(`/projects/${projectId}/script/parse/cancel`, { method: 'POST' });
+  },
   apply(
     projectId: string,
     parsed: ParsedComicsScript,

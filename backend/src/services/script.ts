@@ -37,12 +37,19 @@ export async function startScriptParse(projectId: string): Promise<JobProgress> 
       handle.update(0.05, 'Reading screenplay');
       const markdown = await fs.readText(fs.scriptFile(projectId));
       handle.update(0.15, 'Parsing screenplay with the model (this can take a few minutes)');
-      const parsed = await parseScript(project, markdown);
+      const parsed = await parseScript(project, markdown, handle.signal);
       handle.update(0.95, 'Saving result');
       await fs.writeNickel(fs.parsedScriptFile(projectId), parsed);
     },
     parseJobRef(projectId),
   );
+}
+
+/** Cancel the in-flight parse for a project, if any. Returns whether it cancelled. */
+export async function cancelScriptParse(projectId: string): Promise<boolean> {
+  await getProject(projectId);
+  const job = jobQueue.findActiveByRef(parseJobRef(projectId));
+  return job ? jobQueue.cancel(job.id) : false;
 }
 
 /** The last parsed-but-not-yet-applied script, or null if none is pending. */

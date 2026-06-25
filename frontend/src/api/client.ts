@@ -160,6 +160,9 @@ export const scriptApi = {
   parseActive(projectId: string): Promise<JobProgress | null> {
     return request(`/projects/${projectId}/script/parse/active`);
   },
+  cancelParse(projectId: string): Promise<{ cancelled: boolean }> {
+    return request(`/projects/${projectId}/script/parse/cancel`, { method: 'POST' });
+  },
   apply(projectId: string, parsed: ParsedScript): Promise<ProjectDTO> {
     return request(`/projects/${projectId}/script/apply`, {
       method: 'POST',

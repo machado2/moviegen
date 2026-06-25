@@ -5,6 +5,7 @@ import * as fs from '../../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
 import {
   applyParsedComicsScript,
+  cancelScriptParse,
   getActiveParseJob,
   getParsedScript,
   startScriptParse,
@@ -44,6 +45,12 @@ export async function comicsScriptRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/projects/:id/script/parse/active', async (req) =>
     getActiveParseJob(req.params.id),
   );
+
+  // Abort the in-flight parse (user pressed "Abortar"). Aborts the LLM call.
+  app.post<{ Params: { id: string } }>('/projects/:id/script/parse/cancel', async (req) => {
+    const cancelled = await cancelScriptParse(req.params.id);
+    return { cancelled };
+  });
 
   // The pending parsed-but-not-applied script, or null. Lets the UI restore the
   // review/apply step after a reload while a parse was in flight.

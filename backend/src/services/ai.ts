@@ -35,11 +35,13 @@ async function chat(
   apiKey: string,
   model: string,
   messages: ChatMessage[],
-  opts: { jsonObject?: boolean } = {},
+  opts: { jsonObject?: boolean; signal?: AbortSignal } = {},
 ): Promise<ChatResult> {
   // One timeout covers the whole exchange — connecting AND reading the (large)
   // response body. A slow model that dribbles the body must still be capped.
-  const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  // A caller-supplied signal (job cancellation) aborts it early too.
+  const timeout = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  const signal = opts.signal ? AbortSignal.any([timeout, opts.signal]) : timeout;
   try {
     const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
       method: 'POST',
@@ -135,7 +137,11 @@ interface ParsedScript {
   }[];
 }`;
 
-export async function parseScript(project: Project, scriptMarkdown: string): Promise<ParsedScript> {
+export async function parseScript(
+  project: Project,
+  scriptMarkdown: string,
+  signal?: AbortSignal,
+): Promise<ParsedScript> {
   const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
   const dir = projectDir(project.id);
   await assertUnderCap(dir, spendCapUsd);
@@ -146,7 +152,7 @@ export async function parseScript(project: Project, scriptMarkdown: string): Pro
       { role: 'system', content: PARSE_SYSTEM_PROMPT },
       { role: 'user', content: `Project language hint: ${project.language}\n\nScreenplay:\n\n${scriptMarkdown}` },
     ],
-    { jsonObject: true },
+    { jsonObject: true, signal },
   );
   await recordSpend(dir, spend);
 

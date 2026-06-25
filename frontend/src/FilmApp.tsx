@@ -64,6 +64,12 @@ export function FilmApp({ projectId }: FilmAppProps) {
   const loadHistory = useCallback(() => api.projects.history(projectId), [projectId]);
   const restoreHistory = useCallback((hash: string) => api.projects.restore(projectId, hash), [projectId]);
   const { items, loading: queueLoading, reload: reloadQueue } = useFilmStudioItems(projectId, onChanged);
+  // After a restore, refresh both the project and the production queue so the
+  // Pipeline / Storyboard / Estúdio reflect the restored state immediately.
+  const afterRestore = useCallback(() => {
+    onChanged();
+    void reloadQueue();
+  }, [onChanged, reloadQueue]);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
@@ -100,7 +106,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
         {tab === 'scenes' && <Scenes project={project} />}
         {tab === 'assembly' && <Assembly projectId={project.id} />}
         {tab === 'history' && (
-          <History load={loadHistory} restore={restoreHistory} onRestored={onChanged} />
+          <History load={loadHistory} restore={restoreHistory} onRestored={afterRestore} />
         )}
       </>
     </ProjectShell>

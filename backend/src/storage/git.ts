@@ -91,7 +91,14 @@ async function ensureRepoUnlocked(dir: string): Promise<boolean> {
 
 /** Initialize the repo if needed (idempotent, best-effort). */
 export async function ensureRepo(dir: string): Promise<void> {
-  await serialize(dir, () => ensureRepoUnlocked(dir));
+  await serialize(dir, async () => {
+    try {
+      return await ensureRepoUnlocked(dir);
+    } catch (e) {
+      console.warn(`[git] ensureRepo error in ${dir}: ${String(e)}`);
+      return false;
+    }
+  });
 }
 
 /**
@@ -100,21 +107,26 @@ export async function ensureRepo(dir: string): Promise<void> {
  */
 export async function commit(dir: string, message: string): Promise<string | null> {
   return serialize(dir, async () => {
-    if (!(await ensureRepoUnlocked(dir))) return null;
-    const add = await runGit(dir, ['add', '-A']);
-    if (add.code !== 0) {
-      console.warn(`[git] add failed in ${dir}: ${add.stderr.trim()}`);
+    try {
+      if (!(await ensureRepoUnlocked(dir))) return null;
+      const add = await runGit(dir, ['add', '-A']);
+      if (add.code !== 0) {
+        console.warn(`[git] add failed in ${dir}: ${add.stderr.trim()}`);
+        return null;
+      }
+      const status = await runGit(dir, ['status', '--porcelain']);
+      if (status.code === 0 && status.stdout.trim() === '') return null; // nothing changed
+      const res = await runGit(dir, [...IDENTITY, 'commit', '-m', message, '--allow-empty-message']);
+      if (res.code !== 0) {
+        console.warn(`[git] commit failed in ${dir}: ${res.stderr.trim()}`);
+        return null;
+      }
+      const head = await runGit(dir, ['rev-parse', '--short', 'HEAD']);
+      return head.code === 0 ? head.stdout.trim() : null;
+    } catch (e) {
+      console.warn(`[git] commit error in ${dir}: ${String(e)}`);
       return null;
     }
-    const status = await runGit(dir, ['status', '--porcelain']);
-    if (status.code === 0 && status.stdout.trim() === '') return null; // nothing changed
-    const res = await runGit(dir, [...IDENTITY, 'commit', '-m', message, '--allow-empty-message']);
-    if (res.code !== 0) {
-      console.warn(`[git] commit failed in ${dir}: ${res.stderr.trim()}`);
-      return null;
-    }
-    const head = await runGit(dir, ['rev-parse', '--short', 'HEAD']);
-    return head.code === 0 ? head.stdout.trim() : null;
   });
 }
 
@@ -131,6 +143,7 @@ const REC_SEP = '\x1e';
 /** Commit log, newest first. Empty when there's no repo yet. */
 export async function history(dir: string, limit = 200): Promise<HistoryEntry[]> {
   return serialize(dir, async () => {
+   try {
     if (!(await isGitAvailable()) || !(await isRepo(dir))) return [];
     const fmt = ['%H', '%h', '%s', '%cI'].join(LOG_SEP);
     const r = await runGit(dir, ['log', `--max-count=${limit}`, `--pretty=format:${fmt}${REC_SEP}`]);
@@ -148,6 +161,10 @@ export async function history(dir: string, limit = 200): Promise<HistoryEntry[]>
           date: date ?? '',
         };
       });
+   } catch (e) {
+     console.warn(`[git] history error in ${dir}: ${String(e)}`);
+     return [];
+   }
   });
 }
 
@@ -157,6 +174,7 @@ export async function history(dir: string, limit = 200): Promise<HistoryEntry[]>
  */
 export async function restore(dir: string, hash: string): Promise<string | null> {
   return serialize(dir, async () => {
+   try {
     if (!(await isGitAvailable()) || !(await isRepo(dir))) return null;
     // Bring back that commit's version of every path it contained…
     const checkout = await runGit(dir, ['checkout', hash, '--', '.']);
@@ -185,5 +203,9 @@ export async function restore(dir: string, hash: string): Promise<string | null>
     }
     const head = await runGit(dir, ['rev-parse', '--short', 'HEAD']);
     return head.code === 0 ? head.stdout.trim() : null;
+   } catch (e) {
+     console.warn(`[git] restore error in ${dir}: ${String(e)}`);
+     return null;
+   }
   });
 }

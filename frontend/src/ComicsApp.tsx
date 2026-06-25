@@ -64,6 +64,12 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
   const loadHistory = useCallback(() => comicsApi.projects.history(projectId), [projectId]);
   const restoreHistory = useCallback((hash: string) => comicsApi.projects.restore(projectId, hash), [projectId]);
   const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(projectId, onChanged);
+  // After a restore, refresh both the project and the production queue so the
+  // Pipeline / Storyboard / Estúdio reflect the restored state immediately.
+  const afterRestore = useCallback(() => {
+    onChanged();
+    void reloadQueue();
+  }, [onChanged, reloadQueue]);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
@@ -100,7 +106,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
         {tab === 'pranchas' && <Pranchas project={project} />}
         {tab === 'publication' && <Publication projectId={project.id} />}
         {tab === 'history' && (
-          <History load={loadHistory} restore={restoreHistory} onRestored={onChanged} />
+          <History load={loadHistory} restore={restoreHistory} onRestored={afterRestore} />
         )}
       </>
     </ProjectShell>

@@ -79,7 +79,11 @@ export async function init(): Promise<void> {
 
 /** Record the current state of a comics project as a commit. */
 export async function commitProject(projectId: string, message: string): Promise<void> {
-  await git.commit(projectDir(projectId), message);
+  try {
+    await git.commit(projectDir(projectId), message);
+  } catch {
+    /* best-effort: versioning must never block a save */
+  }
 }
 /** Commit log for a comics project, newest first. */
 export function projectHistory(projectId: string) {

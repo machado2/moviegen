@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   BookMarked,
   BookOpen,
@@ -56,14 +56,14 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
   const [tab, setTab] = useState<Tab>('pipeline');
   const [studioFocus, setStudioFocus] = useState<string | undefined>(undefined);
   const { project, reload: reloadProject } = useComicsProject(projectId);
-  const produce = (key: string) => {
+  const onChanged = useCallback(() => void reloadProject(), [reloadProject]);
+  const produce = useCallback((key: string) => {
     setStudioFocus(key);
     setTab('studio');
-  };
-  const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(
-    projectId,
-    () => void reloadProject(),
-  );
+  }, []);
+  const loadHistory = useCallback(() => comicsApi.projects.history(projectId), [projectId]);
+  const restoreHistory = useCallback((hash: string) => comicsApi.projects.restore(projectId, hash), [projectId]);
+  const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(projectId, onChanged);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
@@ -82,7 +82,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
             onGoMontagem={() => setTab('publication')}
           />
         )}
-        {tab === 'overview' && <Overview project={project} onChanged={() => void reloadProject()} />}
+        {tab === 'overview' && <Overview project={project} onChanged={onChanged} />}
         {tab === 'studio' &&
           (queueLoading ? (
             <p className="text-sm text-muted-foreground">Carregando fila de produção…</p>
@@ -100,11 +100,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
         {tab === 'pranchas' && <Pranchas project={project} />}
         {tab === 'publication' && <Publication projectId={project.id} />}
         {tab === 'history' && (
-          <History
-            load={() => comicsApi.projects.history(project.id)}
-            restore={(hash) => comicsApi.projects.restore(project.id, hash)}
-            onRestored={() => void reloadProject()}
-          />
+          <History load={loadHistory} restore={restoreHistory} onRestored={onChanged} />
         )}
       </>
     </ProjectShell>

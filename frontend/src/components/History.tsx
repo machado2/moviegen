@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { History as HistoryIcon, RotateCcw } from 'lucide-react';
 import type { HistoryEntry } from '@/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,14 +24,22 @@ export function History({ load, restore, onRestored }: HistoryProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Keep the latest callbacks in refs so a new `load`/`restore` identity on every
+  // parent render doesn't retrigger the fetch effect (which would loop forever).
+  const loadRef = useRef(load);
+  loadRef.current = load;
+
   const refresh = useCallback(() => {
     setError(null);
-    void load()
+    void loadRef
+      .current()
       .then(setEntries)
       .catch((e) => setError(String(e instanceof Error ? e.message : e)));
-  }, [load]);
+  }, []);
 
-  useEffect(refresh, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   const doRestore = async (hash: string) => {
     if (!window.confirm('Restaurar o projeto para esta versão? Isso é registrado como uma nova versão (reversível).')) {

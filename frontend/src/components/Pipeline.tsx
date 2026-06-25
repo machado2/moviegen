@@ -39,7 +39,9 @@ export function Pipeline({ items, loading, unitLabel, onGoRoteiro, onGoStudio, o
   const stages = useMemo<Stage[]>(() => {
     const refs = countBy(items, (i) => i.kind === 'character' || i.kind === 'location');
     const units = countBy(items, (i) => i.kind === 'shot' || i.kind === 'quadro');
-    const parsed = items.length > 0;
+    // The parse is what creates the sequence (shots/quadros); use that as the
+    // honest signal rather than "any item exists" (references can be added by hand).
+    const hasStructure = units.total > 0;
 
     const refState: StageState = refs.total === 0 ? 'blocked' : refs.done === refs.total ? 'done' : 'progress';
     const unitState: StageState = units.total === 0 ? 'blocked' : units.done === units.total ? 'done' : 'progress';
@@ -48,8 +50,8 @@ export function Pipeline({ items, loading, unitLabel, onGoRoteiro, onGoStudio, o
     return [
       {
         label: 'Roteiro',
-        detail: parsed ? 'parseado e aplicado' : 'sem roteiro — carregue e parseie',
-        state: parsed ? 'done' : 'blocked',
+        detail: hasStructure ? 'estrutura criada' : 'carregue um roteiro e parseie com IA',
+        state: hasStructure ? 'done' : 'blocked',
         action: { label: 'Abrir', onClick: onGoRoteiro },
       },
       {

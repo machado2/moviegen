@@ -66,6 +66,10 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   useEffect(() => {
     rateRef.current = rateSec;
   }, [rateSec]);
+  // Stop any running API loop if the screen unmounts (e.g. tab switch).
+  useEffect(() => () => {
+    stopRef.current = true;
+  }, []);
 
   // Resolve the focused item; default to the first pending one.
   const current = useMemo(() => {

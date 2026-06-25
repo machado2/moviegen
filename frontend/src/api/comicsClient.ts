@@ -16,6 +16,7 @@ import type {
   PranchaRef,
   Quadro,
   Render,
+  SpendDTO,
 } from '@mediagen/types';
 
 const BASE = '/api/v1/comics';
@@ -126,6 +127,9 @@ export const comicsProjectsApi = {
   },
   restore(id: string, hash: string): Promise<ComicsProjectDTO> {
     return request(`/projects/${id}/restore`, { method: 'POST', body: json({ hash }) });
+  },
+  spend(id: string): Promise<SpendDTO> {
+    return request(`/projects/${id}/spend`);
   },
 };
 

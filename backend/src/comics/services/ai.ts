@@ -6,6 +6,8 @@ import type { ComicsProject, ParsedComicsScript } from '@mediagen/types';
 import { CODEX_BIN, LLM_BASE_URL } from '../../config.js';
 import { HttpError } from '../../lib/errors.js';
 import { getAiConfig } from '../../services/settings.js';
+import { assertUnderCap, recordSpend, type SpendRecord } from '../../services/spend.js';
+import { projectDir } from '../storage.js';
 import { validateParsedComicsScript } from '../validate.js';
 
 // Parsing a long screenplay can legitimately take minutes, but a stalled
@@ -17,13 +19,34 @@ const CHAT_TIMEOUT_MS = 8 * 60 * 1000;
 // producing output.
 type ChunkCallback = (charsReceived: number) => void;
 
+interface ChatResult {
+  content: string;
+  /** Per-call cost/usage reported by the gateway, or null cost when none. */
+  spend: SpendRecord;
+}
+
+// The LiteLLM gateway reports the real dollar cost of a completion in this
+// response header. Parse defensively — missing/blank/non-numeric means "cost
+// unknown", never zero.
+function parseCostHeader(res: Response): number | null {
+  const raw = res.headers.get('x-litellm-response-cost');
+  if (raw == null || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+interface Usage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+}
+
 async function chat(
   apiKey: string,
   model: string,
   system: string,
   user: string,
   onChunk?: ChunkCallback,
-): Promise<string> {
+): Promise<ChatResult> {
   const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
   const stream = onChunk !== undefined;
   try {
@@ -43,18 +66,22 @@ async function chat(
         ],
         response_format: { type: 'json_object' },
         stream,
+        // Ask the gateway to emit a final usage chunk so cost/tokens are known
+        // even when streaming (otherwise the stream carries no usage).
+        ...(stream ? { stream_options: { include_usage: true } } : {}),
       }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new HttpError(502, `LLM gateway request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
     }
+    const costUsd = parseCostHeader(res);
 
     if (!stream) {
-      const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const json = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: Usage };
       const content = json.choices?.[0]?.message?.content;
       if (!content) throw new HttpError(502, 'LLM gateway returned no content');
-      return content;
+      return { content, spend: usageToSpend(costUsd, json.usage) };
     }
 
     // Streaming: parse SSE lines, accumulate delta.content, call onChunk
@@ -64,6 +91,7 @@ async function chat(
     const decoder = new TextDecoder();
     let buffer = '';
     let accumulated = '';
+    let usage: Usage | undefined;
     let lastEmitAt = 0;
 
     while (true) {
@@ -79,7 +107,9 @@ async function chat(
         const raw = line.slice(6).trim();
         if (raw === '[DONE]') continue;
         try {
-          const event = JSON.parse(raw) as { choices?: { delta?: { content?: string } }[] };
+          const event = JSON.parse(raw) as { choices?: { delta?: { content?: string } }[]; usage?: Usage };
+          // The usage-only final chunk has an empty choices array.
+          if (event.usage) usage = event.usage;
           const delta = event.choices?.[0]?.delta?.content;
           if (typeof delta === 'string' && delta) {
             accumulated += delta;
@@ -94,7 +124,7 @@ async function chat(
     }
 
     if (!accumulated) throw new HttpError(502, 'LLM gateway streaming returned no content');
-    return accumulated;
+    return { content: accumulated, spend: usageToSpend(costUsd, usage) };
   } catch (err) {
     if (err instanceof HttpError) throw err;
     if (err instanceof Error && err.name === 'TimeoutError') {
@@ -105,6 +135,14 @@ async function chat(
     }
     throw new HttpError(502, `LLM gateway request failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function usageToSpend(costUsd: number | null, usage: Usage | undefined): SpendRecord {
+  return {
+    costUsd,
+    promptTokens: usage?.prompt_tokens,
+    completionTokens: usage?.completion_tokens,
+  };
 }
 
 function extractJson(raw: string): unknown {
@@ -156,14 +194,17 @@ export async function parseComicsScript(
   scriptMarkdown: string,
   onChunk?: ChunkCallback,
 ): Promise<ParsedComicsScript> {
-  const { apiKey, parseModel: model } = await getAiConfig();
-  const content = await chat(
+  const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
+  const dir = projectDir(project.id);
+  await assertUnderCap(dir, spendCapUsd);
+  const { content, spend } = await chat(
     apiKey,
     model,
     PARSE_SYSTEM_PROMPT,
     `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${scriptMarkdown}`,
     onChunk,
   );
+  await recordSpend(dir, spend);
   let parsed: unknown;
   try {
     parsed = extractJson(content);

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppSettingsDTO } from '@mediagen/types';
-import { api, ApiClientError } from '@/api/client';
+import { api, ApiClientError, type SettingsPatch } from '@/api/client';
 
 export interface UseSettingsResult {
   settings: AppSettingsDTO | null;
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
-  update: (patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => Promise<void>;
+  update: (patch: SettingsPatch) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsResult {
@@ -29,7 +29,7 @@ export function useSettings(): UseSettingsResult {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const update = useCallback(async (patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => {
+  const update = useCallback(async (patch: SettingsPatch) => {
     const updated = await api.settings.update(patch);
     setSettings(updated);
   }, []);

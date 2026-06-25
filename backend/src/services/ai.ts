@@ -2,11 +2,29 @@ import type { ParsedScript, Project } from '@mediagen/types';
 import { LLM_BASE_URL } from '../config.js';
 import { HttpError } from '../lib/errors.js';
 import { getAiConfig } from '../services/settings.js';
+import { assertUnderCap, recordSpend, type SpendRecord } from '../services/spend.js';
+import { projectDir } from '../storage/filesystem.js';
 import { validateParsedScript } from '../lib/validate.js';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+interface ChatResult {
+  content: string;
+  /** Per-call cost reported by the gateway, or null when it reported none. */
+  spend: SpendRecord;
+}
+
+// The LiteLLM gateway returns the real dollar cost of a completion in this
+// response header. Parse it defensively — a missing/blank/non-numeric value
+// means "cost unknown", never zero.
+function parseCostHeader(res: Response): number | null {
+  const raw = res.headers.get('x-litellm-response-cost');
+  if (raw == null || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Parsing a long screenplay can legitimately take minutes, but a stalled
@@ -18,7 +36,7 @@ async function chat(
   model: string,
   messages: ChatMessage[],
   opts: { jsonObject?: boolean } = {},
-): Promise<string> {
+): Promise<ChatResult> {
   // One timeout covers the whole exchange — connecting AND reading the (large)
   // response body. A slow model that dribbles the body must still be capped.
   const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
@@ -41,12 +59,21 @@ async function chat(
       const text = await res.text().catch(() => '');
       throw new HttpError(502, `LLM gateway request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
     }
+    const costUsd = parseCostHeader(res);
     const json = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const content = json.choices?.[0]?.message?.content;
     if (!content) throw new HttpError(502, 'LLM gateway returned no content');
-    return content;
+    return {
+      content,
+      spend: {
+        costUsd,
+        promptTokens: json.usage?.prompt_tokens,
+        completionTokens: json.usage?.completion_tokens,
+      },
+    };
   } catch (err) {
     if (err instanceof HttpError) throw err;
     if (err instanceof Error && err.name === 'TimeoutError') {
@@ -109,8 +136,10 @@ interface ParsedScript {
 }`;
 
 export async function parseScript(project: Project, scriptMarkdown: string): Promise<ParsedScript> {
-  const { apiKey, parseModel: model } = await getAiConfig();
-  const content = await chat(
+  const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
+  const dir = projectDir(project.id);
+  await assertUnderCap(dir, spendCapUsd);
+  const { content, spend } = await chat(
     apiKey,
     model,
     [
@@ -119,6 +148,7 @@ export async function parseScript(project: Project, scriptMarkdown: string): Pro
     ],
     { jsonObject: true },
   );
+  await recordSpend(dir, spend);
 
   let parsed: unknown;
   try {
@@ -143,9 +173,11 @@ export async function generateImagePrompt(
   subject: string,
   kind: 'character' | 'location',
 ): Promise<string> {
-  const { apiKey, parseModel: model } = await getAiConfig();
+  const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
+  const dir = projectDir(project.id);
+  await assertUnderCap(dir, spendCapUsd);
   const style = project.globalStyle ? `Global visual style: ${project.globalStyle}\n` : '';
-  const content = await chat(apiKey, model, [
+  const { content, spend } = await chat(apiKey, model, [
     {
       role: 'system',
       content:
@@ -156,5 +188,6 @@ export async function generateImagePrompt(
       content: `${style}Write an image generation prompt for this ${kind}:\n\n${subject}`,
     },
   ]);
+  await recordSpend(dir, spend);
   return content.trim();
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   BookMarked,
   BookOpen,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useComicsProject } from '@/hooks/comics/useComicsProject';
 import { useComicsStudioItems } from '@/hooks/useStudioQueue';
+import { useSpend } from '@/hooks/useSpend';
 import { Overview } from '@/pages/comics/Overview';
 import { Assets } from '@/pages/comics/Assets';
 import { Pranchas } from '@/pages/comics/Pranchas';
@@ -64,12 +65,19 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
   const loadHistory = useCallback(() => comicsApi.projects.history(projectId), [projectId]);
   const restoreHistory = useCallback((hash: string) => comicsApi.projects.restore(projectId, hash), [projectId]);
   const { items, loading: queueLoading, reload: reloadQueue } = useComicsStudioItems(projectId, onChanged);
+  const fetchSpend = useCallback(() => comicsApi.projects.spend(projectId), [projectId]);
+  const { spend, reload: reloadSpend } = useSpend(fetchSpend);
+  // Keep the Pipeline's cost figure current when returning to it (e.g. after a parse).
+  useEffect(() => {
+    if (tab === 'pipeline') void reloadSpend();
+  }, [tab, reloadSpend]);
   // After a restore, refresh both the project and the production queue so the
   // Pipeline / Storyboard / Estúdio reflect the restored state immediately.
   const afterRestore = useCallback(() => {
     onChanged();
     void reloadQueue();
-  }, [onChanged, reloadQueue]);
+    void reloadSpend();
+  }, [onChanged, reloadQueue, reloadSpend]);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
@@ -83,6 +91,7 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
             items={items}
             loading={queueLoading}
             unitLabel="Quadros"
+            spend={spend}
             onGoRoteiro={() => setTab('overview')}
             onGoStudio={() => setTab('studio')}
             onGoMontagem={() => setTab('publication')}
@@ -97,6 +106,8 @@ export function ComicsApp({ projectId }: ComicsAppProps) {
               items={items}
               onRefresh={reloadQueue}
               initialFocusKey={studioFocus}
+              spend={spend}
+              fetchSpend={fetchSpend}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}

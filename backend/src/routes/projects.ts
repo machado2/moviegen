@@ -9,6 +9,8 @@ import {
   type UpdateProjectInput,
 } from '../services/project.js';
 import { exportProjectZip, importProjectZip } from '../services/archive.js';
+import { getSpend } from '../services/spend.js';
+import { getSpendCap } from '../services/settings.js';
 import * as fs from '../storage/filesystem.js';
 import { readUpload } from '../lib/multipart.js';
 import { badRequest } from '../lib/errors.js';
@@ -62,5 +64,12 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     if (!hash || typeof hash !== 'string') throw badRequest('hash is required');
     await fs.restoreProject(req.params.id, hash);
     return toDTO(await getProject(req.params.id));
+  });
+
+  // Accumulated LLM spend for this project (cost is only ever the gateway's own
+  // reported figure; "—" in the UI when it never reported one).
+  app.get<{ Params: { id: string } }>('/projects/:id/spend', async (req) => {
+    await getProject(req.params.id);
+    return getSpend(fs.projectDir(req.params.id), await getSpendCap());
   });
 }

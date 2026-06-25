@@ -239,6 +239,28 @@ export interface AppSettingsDTO {
   apiKeyFromEnv: boolean;
   parseModel: string;
   ttsModel: string;
+  /** Spend ceiling in USD that pauses API-mode generation when a project reaches it. Null = no cap. */
+  spendCapUsd: number | null;
+}
+
+// ─── Spend tracking ─────────────────────────────────────────────────────────
+
+// Per-project accumulated LLM cost, captured from the gateway's usage/cost
+// reporting. Cost is only ever recorded when the gateway actually returns it —
+// when it doesn't, `hasCost` is false and the UI shows "—" rather than a guess.
+export interface SpendDTO {
+  /** Sum of known per-call costs (USD). 0 when the gateway never reported cost. */
+  totalUsd: number;
+  /** True when at least one recorded call carried a gateway-reported cost. */
+  hasCost: boolean;
+  promptTokens: number;
+  completionTokens: number;
+  /** Total LLM calls recorded (billed or not). */
+  calls: number;
+  /** Global spend cap mirrored here for convenience; null when unset. */
+  capUsd: number | null;
+  /** True when a cap is set and total spend has reached it. */
+  capReached: boolean;
 }
 
 export interface AllProjectSummary {

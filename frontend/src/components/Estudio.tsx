@@ -16,9 +16,11 @@ import {
   Video,
   Zap,
 } from 'lucide-react';
+import type { SpendDTO } from '@mediagen/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { formatUsd, spendLabel } from '@/lib/cost';
 import {
   blobToFile,
   imageFromDataTransfer,
@@ -34,11 +36,15 @@ export interface EstudioProps {
   emptyHint?: string;
   /** When set, the loop opens on this item (e.g. jumped from the Storyboard). */
   initialFocusKey?: string;
+  /** Accumulated LLM spend for this project (header + API-panel display). */
+  spend?: SpendDTO | null;
+  /** Re-fetch the project spend (called after each API generation). */
+  fetchSpend?: () => Promise<SpendDTO>;
 }
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 60));
 
-export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey }: EstudioProps) {
+export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend }: EstudioProps) {
   const items = useMemo(() => orderStudioItems(rawItems), [rawItems]);
   const itemsRef = useRef(items);
   useEffect(() => {
@@ -60,6 +66,29 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   const [review, setReview] = useState<{ url: string; label: string; key?: string } | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Spend: mirror the prop locally so the API loop can refresh it (and read the
+  // latest via a ref) without waiting on the parent re-render.
+  const [spend, setSpend] = useState<SpendDTO | null>(spendProp ?? null);
+  const [lastItemCost, setLastItemCost] = useState<number | null>(null);
+  const spendRef = useRef<SpendDTO | null>(spend);
+  useEffect(() => {
+    setSpend(spendProp ?? null);
+  }, [spendProp]);
+  useEffect(() => {
+    spendRef.current = spend;
+  }, [spend]);
+  const refreshSpend = useCallback(async (): Promise<SpendDTO | null> => {
+    if (!fetchSpend) return spendRef.current;
+    try {
+      const next = await fetchSpend();
+      spendRef.current = next;
+      setSpend(next);
+      return next;
+    } catch {
+      return spendRef.current;
+    }
+  }, [fetchSpend]);
 
   // API mode
   const [apiRunning, setApiRunning] = useState(false);
@@ -258,6 +287,16 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     try {
       let first = true;
       while (!stopRef.current) {
+        // Spend cap: pause automatically once the project reaches its ceiling so
+        // we never quietly keep spending past the configured limit.
+        if (spendRef.current?.capReached) {
+          const cap = spendRef.current.capUsd;
+          setError(
+            `Teto de gasto atingido${cap != null ? ` (US$ ${cap.toFixed(2)})` : ''} — geração pausada. ` +
+              'Ajuste o teto em Configurações para continuar.',
+          );
+          break;
+        }
         const next = itemsRef.current.find((i) => !i.done && !i.skipped && i.apiGenerate);
         if (!next) break;
         if (!first) await waitRate(rateRef.current);
@@ -265,6 +304,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
         first = false;
         setFocusKey(next.key);
         setBusy(true);
+        const before = spendRef.current?.totalUsd ?? 0;
         try {
           const res = await next.apiGenerate!();
           if (res && 'jobId' in res && next.followJob) await next.followJob(res.jobId);
@@ -276,13 +316,16 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           setBusy(false);
         }
         await onRefresh();
+        // Refresh spend and surface this item's cost when the gateway reported one.
+        const after = await refreshSpend();
+        setLastItemCost(after?.hasCost && after.totalUsd > before ? after.totalUsd - before : null);
         await tick();
       }
     } finally {
       setApiRunning(false);
       setCountdown(0);
     }
-  }, [onRefresh, waitRate]);
+  }, [onRefresh, waitRate, refreshSpend]);
 
   const stopApi = useCallback(() => {
     stopRef.current = true;
@@ -312,6 +355,8 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
             {doneCount}/{items.length} prontos · {pendingCount} na fila
             {skippedCount > 0 && ` · ${skippedCount} pulados`}
             {sessionCount > 0 && ` · ${sessionCount} gerados nesta sessão`}
+            {' · '}custo IA: {spendLabel(spend)}
+            {spend?.capUsd != null && ` / $${spend.capUsd.toFixed(2)}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -384,11 +429,21 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
                 <span className="text-muted-foreground">s</span>
                 {countdown > 0 && <span className="text-muted-foreground">· próximo em {countdown}s</span>}
               </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  Custo IA: <span className="font-medium text-foreground">{spendLabel(spend)}</span>
+                  {spend?.capUsd != null && ` de $${spend.capUsd.toFixed(2)}`}
+                </span>
+                <span>
+                  · Último item: {lastItemCost != null ? formatUsd(lastItemCost) : '—'}
+                </span>
+              </div>
               <Button variant="destructive" size="lg" onClick={stopApi} className="w-full gap-2">
                 <Square className="h-5 w-5" /> PARAR GERAÇÃO
               </Button>
               <p className="text-xs text-muted-foreground">
                 Gera um por vez, com limite forte, para você perceber um erro antes de gastar demais.
+                Custo só aparece quando o gateway o informa (imagens via codex ficam em “—”).
               </p>
             </div>
           ) : (

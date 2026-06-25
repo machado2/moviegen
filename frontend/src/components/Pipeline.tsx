@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { ArrowRight, CircleDot, CircleCheck, Circle } from 'lucide-react';
+import type { SpendDTO } from '@mediagen/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { StudioItem } from '@/lib/studio';
+import { spendLabel } from '@/lib/cost';
 
 type StageState = 'done' | 'progress' | 'blocked';
 
@@ -18,6 +20,8 @@ export interface PipelineProps {
   loading: boolean;
   /** Label for the atomic unit: "Shots" (film) or "Quadros" (HQ). */
   unitLabel: string;
+  /** Accumulated LLM spend for this project (null while loading / no calls). */
+  spend?: SpendDTO | null;
   onGoRoteiro: () => void;
   onGoStudio: () => void;
   onGoMontagem: () => void;
@@ -35,7 +39,7 @@ function countBy(items: StudioItem[], pred: (i: StudioItem) => boolean) {
   return { total, done };
 }
 
-export function Pipeline({ items, loading, unitLabel, onGoRoteiro, onGoStudio, onGoMontagem }: PipelineProps) {
+export function Pipeline({ items, loading, unitLabel, spend, onGoRoteiro, onGoStudio, onGoMontagem }: PipelineProps) {
   const stages = useMemo<Stage[]>(() => {
     const refs = countBy(items, (i) => i.kind === 'character' || i.kind === 'location');
     const units = countBy(items, (i) => i.kind === 'shot' || i.kind === 'quadro');
@@ -81,11 +85,16 @@ export function Pipeline({ items, loading, unitLabel, onGoRoteiro, onGoStudio, o
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+        <CardTitle className="flex items-center justify-between gap-3">
           <span>Pipeline</span>
           {!loading && totalUnits > 0 && (
-            <span className="text-sm font-normal text-muted-foreground">
-              {doneUnits}/{totalUnits} unidades prontas
+            <span className="flex items-center gap-2 text-sm font-normal text-muted-foreground">
+              <span>{doneUnits}/{totalUnits} unidades prontas</span>
+              <span className="h-3 w-px bg-border" />
+              <span title="Custo de IA reportado pelo gateway neste projeto">
+                custo IA: {spendLabel(spend)}
+                {spend?.capUsd != null && ` / $${spend.capUsd.toFixed(2)}`}
+              </span>
             </span>
           )}
         </CardTitle>

@@ -24,6 +24,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [editingKey, setEditingKey] = useState(false);
   const [parseModel, setParseModel] = useState('');
   const [ttsModel, setTtsModel] = useState('');
+  const [spendCap, setSpendCap] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +32,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     if (settings) {
       setParseModel(settings.parseModel);
       setTtsModel(settings.ttsModel);
+      setSpendCap(settings.spendCapUsd != null ? String(settings.spendCapUsd) : '');
     }
   }, [settings]);
 
@@ -69,6 +71,23 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         parseModel: parseModel.trim() || null,
         ttsModel: ttsModel.trim() || null,
       });
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveCap = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const trimmed = spendCap.trim();
+      const parsed = trimmed === '' ? null : Number(trimmed);
+      if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) {
+        throw new Error('Informe um valor em dólares (ex.: 5) ou deixe vazio para sem teto.');
+      }
+      await update({ spendCapUsd: parsed });
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
@@ -165,6 +184,29 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             <Button onClick={() => void saveModels()} disabled={saving}>
               <Save className="h-4 w-4" /> Salvar modelos
             </Button>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="spendCap">Teto de gasto por projeto (US$)</Label>
+            <div className="flex gap-2">
+              <Input
+                id="spendCap"
+                type="number"
+                min={0}
+                step="0.5"
+                value={spendCap}
+                placeholder="sem teto"
+                onChange={(e) => setSpendCap(e.target.value)}
+                className="max-w-[160px]"
+              />
+              <Button onClick={() => void saveCap()} disabled={saving}>
+                <Save className="h-4 w-4" /> Salvar teto
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Quando o custo de IA de um projeto atinge este valor, a geração no modo API é pausada
+              automaticamente. Deixe vazio para não ter teto. Vale o custo informado pelo gateway.
+            </p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

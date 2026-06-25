@@ -10,6 +10,8 @@ import {
 } from '../services/project.js';
 import { exportProjectZip, importProjectZip } from '../services/archive.js';
 import * as cfs from '../storage.js';
+import { getSpend } from '../../services/spend.js';
+import { getSpendCap } from '../../services/settings.js';
 import { readUpload } from '../../lib/multipart.js';
 import { badRequest } from '../../lib/errors.js';
 
@@ -59,5 +61,11 @@ export async function comicsProjectRoutes(app: FastifyInstance): Promise<void> {
     if (!hash || typeof hash !== 'string') throw badRequest('hash is required');
     await cfs.restoreProject(req.params.id, hash);
     return toDTO(await getProject(req.params.id));
+  });
+
+  // Accumulated LLM spend for this project (gateway-reported cost only).
+  app.get<{ Params: { id: string } }>('/projects/:id/spend', async (req) => {
+    await getProject(req.params.id);
+    return getSpend(cfs.projectDir(req.params.id), await getSpendCap());
   });
 }

@@ -16,7 +16,16 @@ import type {
   ApiError,
   AppSettingsDTO,
   AllProjectSummary,
+  SpendDTO,
 } from '@mediagen/types';
+
+/** Patch shape for global settings updates (shared by film + comics UIs). */
+export interface SettingsPatch {
+  llmApiKey?: string | null;
+  parseModel?: string | null;
+  ttsModel?: string | null;
+  spendCapUsd?: number | null;
+}
 
 const BASE = '/api/v1';
 
@@ -119,6 +128,9 @@ export const projectsApi = {
   },
   restore(id: string, hash: string): Promise<ProjectDTO> {
     return request(`/projects/${id}/restore`, { method: 'POST', body: json({ hash }) });
+  },
+  spend(id: string): Promise<SpendDTO> {
+    return request(`/projects/${id}/spend`);
   },
 };
 
@@ -421,7 +433,7 @@ export const settingsApi = {
   get(): Promise<AppSettingsDTO> {
     return request('/settings');
   },
-  update(patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }): Promise<AppSettingsDTO> {
+  update(patch: SettingsPatch): Promise<AppSettingsDTO> {
     return request('/settings', { method: 'PATCH', body: json(patch) });
   },
 };

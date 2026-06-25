@@ -60,15 +60,33 @@ async function failFromResponse(res: Response, model: string): Promise<never> {
 
 export interface GenerateImageInput {
   apiKey: string;
+  /**
+   * Model spec: the model id, optionally followed by whitespace-separated
+   * `key=value` params routed to the gateway (e.g. "gpt-image-2 quality=low",
+   * "gpt-image-2 quality=high size=1024x1536"). Model ids never contain spaces.
+   */
   model: string;
   prompt: string;
   /** Reference images (absolute paths) for identity consistency, if any. */
   attachmentPaths?: string[];
 }
 
+/** Split a model spec into the bare model id and its extra gateway params. */
+export function parseModelSpec(spec: string): { model: string; params: Record<string, string> } {
+  const tokens = spec.trim().split(/\s+/).filter(Boolean);
+  const model = tokens[0] ?? '';
+  const params: Record<string, string> = {};
+  for (const tok of tokens.slice(1)) {
+    const i = tok.indexOf('=');
+    if (i > 0) params[tok.slice(0, i)] = tok.slice(i + 1);
+  }
+  return { model, params };
+}
+
 /** Generate one image via the gateway, returning the PNG bytes and the cost. */
 export async function generateImageViaGateway(input: GenerateImageInput): Promise<ImageGenResult> {
-  const { apiKey, model, prompt } = input;
+  const { apiKey, prompt } = input;
+  const { model, params } = parseModelSpec(input.model);
   const attachments = input.attachmentPaths ?? [];
   const signal = AbortSignal.timeout(IMAGE_TIMEOUT_MS);
 
@@ -79,6 +97,7 @@ export async function generateImageViaGateway(input: GenerateImageInput): Promis
       const form = new FormData();
       form.append('model', model);
       form.append('prompt', prompt);
+      for (const [k, v] of Object.entries(params)) form.append(k, v);
       for (const p of attachments) {
         const buf = await fsp.readFile(p);
         const type = MIME[path.extname(p).toLowerCase()] ?? 'image/png';
@@ -95,7 +114,7 @@ export async function generateImageViaGateway(input: GenerateImageInput): Promis
         method: 'POST',
         signal,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model, prompt, n: 1 }),
+        body: JSON.stringify({ model, prompt, n: 1, ...params }),
       });
     }
 

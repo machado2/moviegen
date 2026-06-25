@@ -59,6 +59,7 @@ export async function addTake(
   // First take auto-selected for convenience.
   if (!shot.selectedTakeId) shot.selectedTakeId = take.id;
   await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `take: cena ${scene.number} · shot ${shot.order}`);
   return take;
 }
 
@@ -93,6 +94,7 @@ export async function deleteTake(
   }
   await saveScene(projectId, scene);
   await fs.remove(fs.takeFile(projectId, sceneId, shotId, take.filename));
+  await fs.commitProject(projectId, `take removido: cena ${scene.number} · shot ${shot.order}`);
 }
 
 export async function selectTake(
@@ -109,4 +111,5 @@ export async function selectTake(
   }
   shot.selectedTakeId = takeId;
   await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `seleção de take: cena ${scene.number} · shot ${shot.order}`);
 }

@@ -46,6 +46,7 @@ export async function createAsset(projectId: string, input: CreateAssetInput): P
   };
   project.assets[id] = asset;
   await saveProject(project);
+  await cfs.commitProject(projectId, `asset criado: ${id}`);
   return asset;
 }
 
@@ -61,6 +62,7 @@ export async function updateAsset(
   if (!asset) throw notFound('Asset');
   Object.assign(asset, patch);
   await saveProject(project);
+  await cfs.commitProject(projectId, `edição: asset ${assetId}`);
   return asset;
 }
 
@@ -71,6 +73,7 @@ export async function deleteAsset(projectId: string, assetId: string): Promise<v
   delete project.assets[assetId];
   await saveProject(project);
   if (asset.file) await fs.remove(cfs.resolveInProject(projectId, asset.file));
+  await cfs.commitProject(projectId, `asset removido: ${assetId}`);
 }
 
 export async function uploadAssetFile(
@@ -89,6 +92,7 @@ export async function uploadAssetFile(
   asset.file = rel;
   if (asset.status === 'pending') asset.status = 'active';
   await saveProject(project);
+  await cfs.commitProject(projectId, `asset: ${assetId}`);
   return asset;
 }
 

@@ -22,6 +22,7 @@ export async function createProject(input: CreateProjectInput): Promise<Project>
   await fs.writeNickel(fs.projectFile(id), project);
   await fs.ensureDir(fs.scenesDir(id));
   await fs.ensureDir(fs.assetsDir(id));
+  await fs.commitProject(id, 'projeto criado');
   return project;
 }
 
@@ -82,5 +83,7 @@ export async function updateProject(id: string, patch: UpdateProjectInput): Prom
   if (patch.globalStyle !== undefined) project.globalStyle = patch.globalStyle;
   if (patch.method !== undefined) project.method = patch.method;
   if (patch.restrictions !== undefined) project.restrictions = patch.restrictions;
-  return saveProject(project);
+  const saved = await saveProject(project);
+  await fs.commitProject(id, 'edição: configurações do projeto');
+  return saved;
 }

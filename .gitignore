@@ -8,3 +8,6 @@ data/
 packages/*/dist/
 backend/dist/
 frontend/dist/
+
+# local toolchain (not committed)
+.toolcache/

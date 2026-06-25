@@ -46,6 +46,7 @@ export async function createAsset(projectId: string, input: CreateAssetInput): P
   };
   project.assets[id] = asset;
   await saveProject(project);
+  await fs.commitProject(projectId, `asset criado: ${id}`);
   return asset;
 }
 
@@ -61,6 +62,7 @@ export async function updateAsset(
   if (!asset) throw notFound('Asset');
   Object.assign(asset, patch);
   await saveProject(project);
+  await fs.commitProject(projectId, `edição: asset ${assetId}`);
   return asset;
 }
 
@@ -73,6 +75,7 @@ export async function deleteAsset(projectId: string, assetId: string): Promise<v
   if (asset.file) {
     await fs.remove(fs.resolveInProject(projectId, asset.file));
   }
+  await fs.commitProject(projectId, `asset removido: ${assetId}`);
 }
 
 export async function uploadAssetFile(
@@ -94,6 +97,7 @@ export async function uploadAssetFile(
   asset.file = rel;
   if (asset.status === 'pending') asset.status = 'active';
   await saveProject(project);
+  await fs.commitProject(projectId, `asset: ${assetId}`);
   return asset;
 }
 

@@ -9,6 +9,7 @@ import {
   type UpdateProjectInput,
 } from '../services/project.js';
 import { exportProjectZip, importProjectZip } from '../services/archive.js';
+import * as fs from '../storage/filesystem.js';
 import { readUpload } from '../lib/multipart.js';
 import { badRequest } from '../lib/errors.js';
 
@@ -46,5 +47,20 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     const { buffer } = await readUpload(req);
     const project = await importProjectZip(buffer);
     return reply.code(201).send(toDTO(project));
+  });
+
+  // Version history (per-project git log), newest first.
+  app.get<{ Params: { id: string } }>('/projects/:id/history', async (req) => {
+    await getProject(req.params.id);
+    return fs.projectHistory(req.params.id);
+  });
+
+  // Restore the project to an earlier commit (recorded as a new commit).
+  app.post<{ Params: { id: string }; Body: { hash?: string } }>('/projects/:id/restore', async (req) => {
+    await getProject(req.params.id);
+    const hash = (req.body ?? {}).hash;
+    if (!hash || typeof hash !== 'string') throw badRequest('hash is required');
+    await fs.restoreProject(req.params.id, hash);
+    return toDTO(await getProject(req.params.id));
   });
 }

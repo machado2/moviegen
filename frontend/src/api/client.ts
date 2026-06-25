@@ -20,6 +20,14 @@ import type {
 
 const BASE = '/api/v1';
 
+/** One entry in a project's version history (git commit). */
+export interface HistoryEntry {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string; // ISO 8601
+}
+
 export class ApiClientError extends Error {
   status: number;
   details?: string[];
@@ -105,6 +113,12 @@ export const projectsApi = {
     const form = new FormData();
     form.append('file', file);
     return request('/projects/import', { method: 'POST', body: form });
+  },
+  history(id: string): Promise<HistoryEntry[]> {
+    return request(`/projects/${id}/history`);
+  },
+  restore(id: string, hash: string): Promise<ProjectDTO> {
+    return request(`/projects/${id}/restore`, { method: 'POST', body: json({ hash }) });
   },
 };
 

@@ -9,6 +9,9 @@ import { DATA_DIR, PROJECTS_DIR } from '../config.js';
 // On-disk project data is Nickel, not JSON. These are the codec entry points.
 export { readNickel, readNickelString, writeNickel, toNickel } from './nickel.js';
 
+import * as git from './git.js';
+export type { HistoryEntry } from './git.js';
+
 export function projectDir(projectId: string): string {
   return path.join(PROJECTS_DIR, projectId);
 }
@@ -109,6 +112,22 @@ export async function listProjectIds(): Promise<string[]> {
 
 /** Stream helpers re-exported so routes don't import node:fs directly. */
 export { createReadStream, createWriteStream };
+
+// ─── Version history (per-project git repo) ─────────────────────────────────
+// Best-effort: never throws, so a save is never blocked by versioning.
+
+/** Record the current state of a film project as a commit. */
+export async function commitProject(projectId: string, message: string): Promise<void> {
+  await git.commit(projectDir(projectId), message);
+}
+/** Commit log for a film project, newest first. */
+export function projectHistory(projectId: string) {
+  return git.history(projectDir(projectId));
+}
+/** Restore a film project to an earlier commit (recorded as a new commit). */
+export function restoreProject(projectId: string, hash: string) {
+  return git.restore(projectDir(projectId), hash);
+}
 
 export async function init(): Promise<void> {
   await ensureDir(DATA_DIR);

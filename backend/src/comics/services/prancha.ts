@@ -80,7 +80,9 @@ export async function createPrancha(projectId: string, input: CreatePranchaInput
     layout: input.layout,
     quadros: Array.from({ length: count }, (_, i) => emptyQuadro(input.layout, i)),
   };
-  return savePrancha(projectId, prancha);
+  const saved = await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `prancha criada: ${number} · ${prancha.shortTitle}`);
+  return saved;
 }
 
 export interface UpdatePranchaInput {
@@ -104,7 +106,9 @@ export async function updatePrancha(
     // Re-derive slot formats; renders are preserved (additive, never destroyed).
     resyncSlots(prancha);
   }
-  return savePrancha(projectId, prancha);
+  const saved = await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `edição: prancha ${prancha.number}`);
+  return saved;
 }
 
 export async function deletePrancha(projectId: string, pranchaId: string): Promise<void> {
@@ -115,6 +119,7 @@ export async function deletePrancha(projectId: string, pranchaId: string): Promi
   await fs.remove(cfs.pranchaFile(projectId, pranchaId));
   await fs.remove(cfs.pranchaRendersDir(projectId, pranchaId));
   await fs.remove(cfs.pranchaOutputFile(projectId, pranchaId));
+  await cfs.commitProject(projectId, 'prancha removida');
 }
 
 export async function reorderPranchas(projectId: string, orderedIds: string[]): Promise<PranchaRef[]> {
@@ -134,6 +139,7 @@ export async function reorderPranchas(projectId: string, orderedIds: string[]): 
     return { ...ref, number: i + 1 };
   });
   await saveProject(refreshed);
+  await cfs.commitProject(projectId, 'pranchas reordenadas');
   return refreshed.pranchas;
 }
 
@@ -167,6 +173,7 @@ export async function addQuadro(
   prancha.quadros.push(quadro);
   resyncSlots(prancha);
   await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `quadro: prancha ${prancha.number} · quadro ${quadro.order}`);
   return prancha.quadros.find((q) => q.id === quadro.id)!;
 }
 
@@ -191,6 +198,7 @@ export async function updateQuadro(
   if (patch.restrictions !== undefined) quadro.restrictions = patch.restrictions;
   if (patch.refs !== undefined) quadro.refs = patch.refs;
   await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `edição: prancha ${prancha.number} · quadro ${quadro.order}`);
   return quadro;
 }
 
@@ -201,6 +209,7 @@ export async function deleteQuadro(projectId: string, pranchaId: string, quadroI
   resyncSlots(prancha);
   await savePrancha(projectId, prancha);
   await fs.remove(cfs.rendersDir(projectId, pranchaId, quadroId));
+  await cfs.commitProject(projectId, `quadro removido: prancha ${prancha.number}`);
 }
 
 export async function reorderQuadros(
@@ -217,5 +226,6 @@ export async function reorderQuadros(
   prancha.quadros = orderedIds.map((id) => byId.get(id)!);
   resyncSlots(prancha);
   await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `quadros reordenados: prancha ${prancha.number}`);
   return prancha.quadros;
 }

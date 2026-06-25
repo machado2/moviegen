@@ -64,6 +64,7 @@ export async function addRender(
   quadro.renders.push(render);
   if (!quadro.selectedRenderId) quadro.selectedRenderId = render.id;
   await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `render: prancha ${prancha.number} · quadro ${quadro.order}`);
   return render;
 }
 
@@ -98,6 +99,7 @@ export async function deleteRender(
   }
   await savePrancha(projectId, prancha);
   await fs.remove(cfs.renderFile(projectId, pranchaId, quadroId, render.filename));
+  await cfs.commitProject(projectId, `render removido: prancha ${prancha.number} · quadro ${quadro.order}`);
 }
 
 export async function selectRender(
@@ -114,4 +116,5 @@ export async function selectRender(
   }
   quadro.selectedRenderId = renderId;
   await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `seleção de render: prancha ${prancha.number} · quadro ${quadro.order}`);
 }

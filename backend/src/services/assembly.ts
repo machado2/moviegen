@@ -85,6 +85,7 @@ export async function startSceneAssembly(projectId: string, sceneId: string): Pr
   const outputPath = fs.sceneOutputFile(projectId, sceneId);
   return jobQueue.start('scene-assembly', async (handle) => {
     await assembleScene(paths, outputPath, (p, m) => handle.update(p, m));
+    await fs.commitProject(projectId, `montagem: cena ${scene.number} · ${scene.shortTitle}`);
   });
 }
 
@@ -107,5 +108,6 @@ export async function startMovieAssembly(projectId: string): Promise<JobProgress
   const outputPath = fs.movieOutputFile(projectId);
   return jobQueue.start('movie-assembly', async (handle) => {
     await assembleMovie(outputs, outputPath, (p, m) => handle.update(p, m));
+    await fs.commitProject(projectId, 'montagem: filme completo');
   });
 }

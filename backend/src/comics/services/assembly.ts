@@ -103,6 +103,7 @@ export async function startPranchaAssembly(
   return jobQueue.start('prancha-assembly', async (handle) => {
     handle.update(0.1, 'Composing page…');
     await montagePrancha({ ...opts, layout: prancha.layout, renders: paths, output });
+    await cfs.commitProject(projectId, `montagem: prancha ${prancha.number} · ${prancha.shortTitle}`);
     handle.update(1, 'Page assembled');
   });
 }
@@ -148,6 +149,7 @@ export async function startBookAssembly(
         },
       );
     }
+    await cfs.commitProject(projectId, `publicação: ${wanted.join(', ')}`);
     handle.update(1, 'Book assembled');
   });
 }

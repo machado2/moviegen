@@ -31,6 +31,7 @@ export async function createProject(input: CreateComicsProjectInput): Promise<Co
   await fs.writeNickel(cfs.projectFile(id), project);
   await fs.ensureDir(cfs.pranchasDir(id));
   await fs.ensureDir(cfs.assetsDir(id));
+  await cfs.commitProject(id, 'projeto criado');
   return project;
 }
 
@@ -92,5 +93,7 @@ export async function updateProject(
   if (patch.language !== undefined) project.language = patch.language;
   if (patch.globalStyle !== undefined) project.globalStyle = patch.globalStyle;
   if (patch.restrictions !== undefined) project.restrictions = patch.restrictions;
-  return saveProject(project);
+  const saved = await saveProject(project);
+  await cfs.commitProject(id, 'edição: configurações do projeto');
+  return saved;
 }

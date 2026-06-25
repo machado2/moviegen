@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JobProgress, ParsedScript, Project, ProjectDTO } from '@mediagen/types';
-import { Download, FileUp, Save, Sparkles, Upload } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import type { JobProgress, ParsedScript, ProjectDTO } from '@mediagen/types';
+import { Download, Save, Sparkles, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { StringList } from '@/components/StringList';
-import { ScriptImportModal } from '@/components/ScriptImportModal';
+import { ScriptUpload } from '@/components/ScriptUpload';
 import { api, ApiClientError } from '@/api/client';
 
 export interface OverviewProps {
@@ -19,25 +19,31 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [title, setTitle] = useState(project.title);
   const [globalStyle, setGlobalStyle] = useState(project.globalStyle);
   const [method, setMethod] = useState<string[]>(project.method);
-  const [restrictions, setRestrictions] = useState<string[]>(
-    project.restrictions,
-  );
+  const [restrictions, setRestrictions] = useState<string[]>(project.restrictions);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [parseOpen, setParseOpen] = useState(false);
-  const [parsed, setParsed] = useState<ParsedScript | null>(null);
   const [parsing, setParsing] = useState(false);
   const [parseJob, setParseJob] = useState<JobProgress | null>(null);
-  const [applying, setApplying] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const scriptInput = useRef<HTMLInputElement>(null);
-  const structuredInput = useRef<HTMLInputElement>(null);
+  // Apply a finished parse automatically and commit it (the git history is the
+  // review mechanism — no confirmation popup). Then refresh the project.
+  const autoApply = useCallback(
+    async (p: ParsedScript) => {
+      try {
+        await api.script.apply(project.id, p);
+        setParseError(null);
+      } catch (e) {
+        setParseError(e instanceof ApiClientError ? e.message : String(e));
+      } finally {
+        onChanged();
+      }
+    },
+    [project.id, onChanged],
+  );
 
-  // Follow a parse job over SSE: stream progress, then load the persisted
-  // result on success. Shared by a fresh parse and by re-attaching after a
-  // reload, so both behave identically.
+  // Follow a parse job over SSE; on success, fetch the result and apply it.
   const trackParse = useCallback(
     (jobId: string) => {
       api.assembly.subscribeJob(
@@ -49,29 +55,26 @@ export function Overview({ project, onChanged }: OverviewProps) {
             setParsing(false);
             void api.script
               .parsed(project.id)
-              .then((result) => setParsed(result))
-              .catch((e) =>
-                setParseError(e instanceof ApiClientError ? e.message : String(e)),
-              );
+              .then((result) => {
+                if (result) void autoApply(result);
+              })
+              .catch((e) => setParseError(e instanceof ApiClientError ? e.message : String(e)));
           } else if (p.status === 'error') {
             setParsing(false);
-            setParseError(p.error ?? 'Failed to parse the screenplay');
+            setParseError(p.error ?? 'Falha ao parsear o roteiro');
           }
         },
         () => {
           setParsing(false);
-          setParseError(
-            'Lost the progress connection. The parse may still be running on the server — reopen to check.',
-          );
+          setParseError('Conexão de progresso perdida. O parse pode ainda estar rodando no servidor.');
         },
       );
     },
-    [project.id],
+    [project.id, autoApply],
   );
 
-  // On load, restore parse state the page was away for: re-attach to an
-  // in-flight parse job, or surface a finished-but-unapplied result. Both are
-  // server-side, so a reload mid-parse never loses anything.
+  // Re-attach to an in-flight parse after a reload, or apply a finished-but-not-
+  // yet-applied result left pending on the server.
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -85,15 +88,15 @@ export function Overview({ project, onChanged }: OverviewProps) {
           return;
         }
         const pending = await api.script.parsed(project.id);
-        if (alive && pending) setParsed(pending);
+        if (alive && pending) void autoApply(pending);
       } catch {
-        /* no pending parse, or project not yet loaded */
+        /* no pending parse */
       }
     })();
     return () => {
       alive = false;
     };
-  }, [project.id, trackParse]);
+  }, [project.id, trackParse, autoApply]);
 
   const save = async () => {
     setSaving(true);
@@ -116,12 +119,8 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const parseScript = async () => {
     setParsing(true);
     setParseError(null);
-    setParsed(null);
     setParseJob(null);
-    setParseOpen(true);
     try {
-      // Parse runs server-side as a job; the result is persisted, so closing
-      // this dialog (or reloading) is safe — trackParse follows it over SSE.
       const { jobId } = await api.script.parse(project.id);
       trackParse(jobId);
     } catch (e) {
@@ -130,45 +129,19 @@ export function Overview({ project, onChanged }: OverviewProps) {
     }
   };
 
-  const applyParsed = async (p: ParsedScript) => {
-    setApplying(true);
-    setParseError(null);
-    try {
-      await api.script.apply(project.id, p);
-      setParseOpen(false);
-      setParsed(null);
-      onChanged();
-    } catch (e) {
-      setParseError(e instanceof ApiClientError ? e.message : String(e));
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  const structuredImport = async (file: File) => {
-    const text = await file.text();
-    const data = JSON.parse(text) as Project;
-    await api.script.structuredImport(project.id, data);
-    onChanged();
-  };
-
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Project</CardTitle>
+          <CardTitle>Projeto</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <Label htmlFor="title">Título</Label>
+            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="style">Global style</Label>
+            <Label htmlFor="style">Estilo global</Label>
             <Textarea
               id="style"
               value={globalStyle}
@@ -177,105 +150,60 @@ export function Overview({ project, onChanged }: OverviewProps) {
             />
           </div>
           <div className="space-y-1">
-            <Label>Method principles</Label>
-            <StringList
-              items={method}
-              placeholder="Add a production principle…"
-              onChange={setMethod}
-            />
+            <Label>Princípios de produção</Label>
+            <StringList items={method} placeholder="Adicionar um princípio…" onChange={setMethod} />
           </div>
           <div className="space-y-1">
-            <Label>Restrictions</Label>
-            <StringList
-              items={restrictions}
-              placeholder="Add a never-do rule…"
-              onChange={setRestrictions}
-            />
+            <Label>Restrições</Label>
+            <StringList items={restrictions} placeholder="Adicionar uma regra de 'nunca fazer'…" onChange={setRestrictions} />
           </div>
-          {saveError && (
-            <p className="text-sm text-destructive">{saveError}</p>
-          )}
+          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
           <Button onClick={() => void save()} disabled={saving}>
             <Save className="h-4 w-4" />
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? 'Salvando…' : 'Salvar alterações'}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Script</CardTitle>
+          <CardTitle>Roteiro</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <input
-            ref={scriptInput}
-            type="file"
-            accept=".md,text/markdown,text/plain"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadScript(f);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            variant="outline"
-            onClick={() => scriptInput.current?.click()}
-          >
-            <Upload className="h-4 w-4" /> Upload markdown script
-          </Button>
-          <Button onClick={() => void parseScript()} disabled={parsing}>
-            <Sparkles className="h-4 w-4" />
-            {parsing ? 'Parsing…' : 'Parse with AI'}
-          </Button>
-          {parsing && (
-            <Button variant="secondary" onClick={() => setParseOpen(true)}>
-              <Sparkles className="h-4 w-4" /> View parse progress
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <ScriptUpload onUpload={(f) => void uploadScript(f)}>
+              <Button variant="outline">
+                <Upload className="h-4 w-4" /> Carregar roteiro
+              </Button>
+            </ScriptUpload>
+            <Button onClick={() => void parseScript()} disabled={parsing}>
+              <Sparkles className="h-4 w-4" />
+              {parsing ? 'Parseando…' : 'Parsear com IA'}
             </Button>
-          )}
-          {!parsing && parsed && (
-            <Button variant="secondary" onClick={() => setParseOpen(true)}>
-              <Sparkles className="h-4 w-4" /> Review pending parse
+            <Button variant="outline" onClick={() => void api.projects.export(project.id)}>
+              <Download className="h-4 w-4" /> Exportar projeto
             </Button>
-          )}
+          </div>
 
-          <input
-            ref={structuredInput}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void structuredImport(f);
-              e.target.value = '';
-            }}
-          />
-          <Button
-            variant="outline"
-            onClick={() => structuredInput.current?.click()}
-          >
-            <FileUp className="h-4 w-4" /> Import structured JSON
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => void api.projects.export(project.id)}
-          >
-            <Download className="h-4 w-4" /> Export project ZIP
-          </Button>
+          {parsing && (
+            <div className="space-y-1">
+              <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.round((parseJob?.progress ?? 0) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {parseJob?.message ?? 'Parseando o roteiro…'} — aplica e versiona automaticamente ao terminar.
+              </p>
+            </div>
+          )}
+          {parseError && <p className="text-sm text-destructive">{parseError}</p>}
+          <p className="text-xs text-muted-foreground">
+            O parse aplica a estrutura automaticamente e registra uma versão. Para revisar ou desfazer, use o Histórico.
+          </p>
         </CardContent>
       </Card>
-
-      <ScriptImportModal
-        open={parseOpen}
-        onOpenChange={setParseOpen}
-        parsed={parsing ? null : parsed}
-        applying={applying}
-        error={parseError}
-        onApply={(p) => void applyParsed(p)}
-        parsing={parsing}
-        progress={parseJob?.progress ?? 0}
-        progressMessage={parseJob?.message}
-      />
     </div>
   );
 }

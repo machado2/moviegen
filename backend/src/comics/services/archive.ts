@@ -88,5 +88,6 @@ export async function importProjectZip(buffer: Buffer): Promise<ComicsProject> {
     await fs.writeBuffer(dest, e.getData());
   }
   await saveProject(project);
+  await cfs.commitProject(project.id, 'projeto importado');
   return project;
 }

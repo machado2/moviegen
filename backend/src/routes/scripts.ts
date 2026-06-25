@@ -28,6 +28,7 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
       throw badRequest('Provide the screenplay as a file upload or { content } JSON');
     }
     await fs.writeText(fs.scriptFile(req.params.id), markdown);
+    await fs.commitProject(req.params.id, 'roteiro: atualizado');
     return { ok: true, bytes: Buffer.byteLength(markdown) };
   });
 

@@ -104,6 +104,7 @@ export async function importProjectZip(buffer: Buffer): Promise<Project> {
   }
 
   await saveProject(project);
+  await fs.commitProject(project.id, 'projeto importado');
   return project;
 }
 

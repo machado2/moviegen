@@ -146,6 +146,10 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
   const saved = await saveProject(project);
   // The pending parse has been consumed; drop it so the UI doesn't re-offer it.
   await clearParsedScript(projectId);
+  await fs.commitProject(
+    projectId,
+    `parse aplicado: ${parsed.scenes.length} cenas · ${parsed.characters.length} personagens`,
+  );
   return saved;
 }
 
@@ -198,5 +202,7 @@ export async function structuredImport(projectId: string, payload: unknown): Pro
   }
   refs.sort((a, b) => a.number - b.number);
   project.scenes = refs;
-  return saveProject(project);
+  const saved = await saveProject(project);
+  await fs.commitProject(projectId, 'projeto importado');
+  return saved;
 }

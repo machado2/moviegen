@@ -59,7 +59,9 @@ export async function createScene(projectId: string, input: CreateSceneInput): P
     refs: [],
     shots: [],
   };
-  return saveScene(projectId, scene);
+  const saved = await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `cena criada: ${number} · ${scene.shortTitle}`);
+  return saved;
 }
 
 export interface UpdateSceneInput {
@@ -85,7 +87,9 @@ export async function updateScene(
   if (patch.summary !== undefined) scene.summary = patch.summary;
   if (patch.continuity !== undefined) scene.continuity = patch.continuity;
   if (patch.refs !== undefined) scene.refs = patch.refs;
-  return saveScene(projectId, scene);
+  const saved = await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `edição: cena ${scene.number}`);
+  return saved;
 }
 
 export async function deleteScene(projectId: string, sceneId: string): Promise<void> {
@@ -96,6 +100,7 @@ export async function deleteScene(projectId: string, sceneId: string): Promise<v
   await fs.remove(fs.sceneFile(projectId, sceneId));
   await fs.remove(fs.sceneTakesDir(projectId, sceneId));
   await fs.remove(fs.sceneOutputFile(projectId, sceneId));
+  await fs.commitProject(projectId, `cena removida`);
 }
 
 export async function reorderScenes(projectId: string, orderedIds: string[]): Promise<SceneRef[]> {
@@ -117,6 +122,7 @@ export async function reorderScenes(projectId: string, orderedIds: string[]): Pr
     return { ...ref, number: i + 1 };
   });
   await saveProject(refreshed);
+  await fs.commitProject(projectId, 'cenas reordenadas');
   return refreshed.scenes;
 }
 
@@ -162,6 +168,7 @@ export async function addShot(projectId: string, sceneId: string, input: CreateS
   scene.shots.push(shot);
   scene.shots.sort((a, b) => a.order - b.order);
   await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `shot: cena ${scene.number} · shot ${shot.order}`);
   return shot;
 }
 
@@ -180,6 +187,7 @@ export async function updateShot(
   if (patch.targetDuration !== undefined) shot.targetDuration = clampDuration(patch.targetDuration);
   scene.shots.sort((a, b) => a.order - b.order);
   await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `edição: cena ${scene.number} · shot ${shot.order}`);
   return shot;
 }
 
@@ -189,6 +197,7 @@ export async function deleteShot(projectId: string, sceneId: string, shotId: str
   scene.shots = scene.shots.filter((s) => s.id !== shotId);
   await saveScene(projectId, scene);
   await fs.remove(fs.takesDir(projectId, sceneId, shotId));
+  await fs.commitProject(projectId, `shot removido: cena ${scene.number}`);
 }
 
 export async function reorderShots(
@@ -208,5 +217,6 @@ export async function reorderShots(
     return shot;
   });
   await saveScene(projectId, scene);
+  await fs.commitProject(projectId, `shots reordenados: cena ${scene.number}`);
   return scene.shots;
 }

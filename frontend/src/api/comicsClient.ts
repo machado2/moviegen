@@ -20,6 +20,14 @@ import type {
 
 const BASE = '/api/v1/comics';
 
+/** One entry in a project's version history (git commit). */
+export interface HistoryEntry {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string; // ISO 8601
+}
+
 export class ComicsApiError extends Error {
   status: number;
   details?: string[];
@@ -112,6 +120,12 @@ export const comicsProjectsApi = {
     const form = new FormData();
     form.append('file', file);
     return request('/projects/import', { method: 'POST', body: form });
+  },
+  history(id: string): Promise<HistoryEntry[]> {
+    return request(`/projects/${id}/history`);
+  },
+  restore(id: string, hash: string): Promise<ComicsProjectDTO> {
+    return request(`/projects/${id}/restore`, { method: 'POST', body: json({ hash }) });
   },
 };
 

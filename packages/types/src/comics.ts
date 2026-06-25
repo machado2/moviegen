@@ -43,6 +43,8 @@ export interface ComicsAsset {
   characterName?: string;         // for character assets: canonical name
   characterDescription?: string;  // canonical description: age, ethnicity, wardrobe, posture
   description?: string;           // human-readable notes
+  skipped?: boolean;              // production queue: user skipped this unit (persisted)
+  queuePriority?: number;         // production queue: manual ordering (lower = earlier); queue-only
 }
 
 // ─── Pranchas ─────────────────────────────────────────────────────────────────
@@ -108,6 +110,9 @@ export interface Quadro {
   texts: QuadroText[];            // all texts that must appear in the quadro
   restrictions: string[];         // quadro-specific restrictions (besides global)
   refs: string[];                 // ids of assets attached to the prompt (besides characters)
+
+  skipped?: boolean;              // production queue: user skipped this unit (persisted)
+  queuePriority?: number;         // production queue: manual ordering (lower = earlier); queue-only
 
   selectedRenderId: string | null;
   renders: Render[];

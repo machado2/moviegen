@@ -55,6 +55,8 @@ export interface Asset {
   crop?: string;           // crop descriptor when derived (e.g. "right-panel")
   characterName?: string;  // for character assets: which character this belongs to
   description?: string;    // human-readable notes
+  skipped?: boolean;       // production queue: user skipped this unit (persisted)
+  queuePriority?: number;  // production queue: manual ordering (lower = earlier); queue-only, not narrative order
 }
 
 // ─── Scenes ───────────────────────────────────────────────────────────────────
@@ -94,6 +96,9 @@ export interface Shot {
   sounds: string[];         // sound descriptions (ambient, effects)
   lines: DialogueLine[];    // spoken lines (dialogue and voice-over)
   refs: AssetRef[];         // assets specific to this shot (added to scene refs)
+
+  skipped?: boolean;        // production queue: user skipped this unit (persisted)
+  queuePriority?: number;   // production queue: manual ordering (lower = earlier); queue-only, not narrative order
 
   selectedTakeId: string | null;
   takes: Take[];

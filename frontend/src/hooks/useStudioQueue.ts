@@ -66,7 +66,15 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         sublabel: isLocation ? 'Cenário' : 'Personagem',
         accepts: 'image',
         done,
+        skipped: asset.skipped ?? false,
+        queuePriority: asset.queuePriority,
         thumbnailUrl: done ? api.assets.fileUrl(projectId, asset.id) : undefined,
+        setSkipped: async (s) => {
+          await api.assets.update(projectId, asset.id, { skipped: s });
+        },
+        setPriority: async (p) => {
+          await api.assets.update(projectId, asset.id, { queuePriority: p });
+        },
         getPrompt: async () =>
           [
             isLocation
@@ -101,6 +109,14 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
           sublabel: scene.shortTitle,
           accepts: 'video',
           done,
+          skipped: shot.skipped ?? false,
+          queuePriority: shot.queuePriority,
+          setSkipped: async (s) => {
+            await api.shots.update(projectId, scene.id, shot.id, { skipped: s });
+          },
+          setPriority: async (p) => {
+            await api.shots.update(projectId, scene.id, shot.id, { queuePriority: p });
+          },
           getPrompt: async () => buildShotPrompt(fresh, scene, shot),
           getAttachments: (): StudioAttachment[] => {
             const att: StudioAttachment[] = [];
@@ -151,7 +167,15 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
         sublabel: 'Personagem',
         accepts: 'image',
         done,
+        skipped: asset.skipped ?? false,
+        queuePriority: asset.queuePriority,
         thumbnailUrl: done ? comicsApi.assets.fileUrl(projectId, asset.id) : undefined,
+        setSkipped: async (s) => {
+          await comicsApi.assets.update(projectId, asset.id, { skipped: s });
+        },
+        setPriority: async (p) => {
+          await comicsApi.assets.update(projectId, asset.id, { queuePriority: p });
+        },
         getPrompt: async () =>
           [
             `Folha de referência de personagem para a graphic novel "${fresh.title}".`,
@@ -182,10 +206,18 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
           sublabel: prancha.shortTitle,
           accepts: 'image',
           done,
+          skipped: quadro.skipped ?? false,
+          queuePriority: quadro.queuePriority,
           thumbnailUrl:
             done && quadro.selectedRenderId
               ? comicsApi.renders.imageUrl(projectId, prancha.id, quadro.id, quadro.selectedRenderId)
               : undefined,
+          setSkipped: async (s) => {
+            await comicsApi.quadros.update(projectId, prancha.id, quadro.id, { skipped: s });
+          },
+          setPriority: async (p) => {
+            await comicsApi.quadros.update(projectId, prancha.id, quadro.id, { queuePriority: p });
+          },
           getPrompt: async () => (await comicsApi.quadros.prompt(projectId, prancha.id, quadro.id)).prompt,
           getAttachments: (): StudioAttachment[] => {
             const att: StudioAttachment[] = [];

@@ -8,3 +8,7 @@ data/
 packages/*/dist/
 backend/dist/
 frontend/dist/
+
+# Claude Code local config & worktrees
+.claude/settings.local.json
+.claude/worktrees/

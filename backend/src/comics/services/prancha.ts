@@ -179,7 +179,7 @@ export async function addQuadro(
 
 // slotFormat and renders are managed automatically and cannot be patched directly.
 export type UpdateQuadroInput = Partial<
-  Pick<Quadro, 'composition' | 'characters' | 'setting' | 'texts' | 'restrictions' | 'refs'>
+  Pick<Quadro, 'composition' | 'characters' | 'setting' | 'texts' | 'restrictions' | 'refs' | 'skipped' | 'queuePriority'>
 >;
 
 export async function updateQuadro(
@@ -197,6 +197,8 @@ export async function updateQuadro(
   if (patch.texts !== undefined) quadro.texts = patch.texts;
   if (patch.restrictions !== undefined) quadro.restrictions = patch.restrictions;
   if (patch.refs !== undefined) quadro.refs = patch.refs;
+  if (patch.skipped !== undefined) quadro.skipped = patch.skipped;
+  if (patch.queuePriority !== undefined) quadro.queuePriority = patch.queuePriority;
   await savePrancha(projectId, prancha);
   await cfs.commitProject(projectId, `edição: prancha ${prancha.number} · quadro ${quadro.order}`);
   return quadro;

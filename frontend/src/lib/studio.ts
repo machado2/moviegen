@@ -24,6 +24,10 @@ export interface StudioItem {
   accepts: 'image' | 'video';
   /** Whether this unit already has a selected result. */
   done: boolean;
+  /** User marked this unit as skipped (persisted); sinks to the end of the queue. */
+  skipped: boolean;
+  /** Manual queue ordering within its kind group (lower = earlier); queue-only. */
+  queuePriority?: number;
   /** Thumbnail of the current selected result (images only). */
   thumbnailUrl?: string;
   /** Build the self-contained, copy-paste-ready prompt (may hit the API). */
@@ -36,15 +40,35 @@ export interface StudioItem {
   apiGenerate?: () => Promise<{ jobId: string } | void>;
   /** Follow an API job to completion (resolves when done, rejects on error). */
   followJob?: (jobId: string) => Promise<void>;
+  /** Persist the skipped flag for this unit. */
+  setSkipped: (skipped: boolean) => Promise<void>;
+  /** Persist a manual queue-ordering value for this unit. */
+  setPriority: (priority: number) => Promise<void>;
 }
 
-/** Order: pending references first (by relevance), then pending units, then done. */
+/**
+ * Queue order: pending-active first, then skipped, then done. Within those,
+ * references (characters/locations) come before the sequence (shots/quadros),
+ * and a manual `queuePriority` reorders within a kind group (falling back to the
+ * build order). Stable on the input order otherwise.
+ */
 export function orderStudioItems(items: StudioItem[]): StudioItem[] {
   const kindRank: Record<StudioKind, number> = { character: 0, location: 1, shot: 2, quadro: 2 };
-  return [...items].sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1; // pending first
-    return kindRank[a.kind] - kindRank[b.kind];
-  });
+  return items
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => {
+      const A = a.it;
+      const B = b.it;
+      if (A.done !== B.done) return A.done ? 1 : -1; // pending before done
+      if (A.skipped !== B.skipped) return A.skipped ? 1 : -1; // skipped sink within their band
+      const kr = kindRank[A.kind] - kindRank[B.kind];
+      if (kr !== 0) return kr;
+      const ap = A.queuePriority ?? a.i;
+      const bp = B.queuePriority ?? b.i;
+      if (ap !== bp) return ap - bp;
+      return a.i - b.i;
+    })
+    .map((x) => x.it);
 }
 
 /** Turn a pasted/dropped blob into a File with a sensible name + extension. */

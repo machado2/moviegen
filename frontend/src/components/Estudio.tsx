@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   Clipboard,
   Copy,
   Image as ImageIcon,
   Loader2,
+  PlayCircle,
   RotateCcw,
   SkipForward,
   Square,
@@ -71,18 +75,29 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     stopRef.current = true;
   }, []);
 
-  // Resolve the focused item; default to the first pending one.
+  // Resolve the focused item; default to the first active (pending, not skipped).
   const current = useMemo(() => {
     if (focusKey) {
       const f = items.find((i) => i.key === focusKey);
       if (f) return f;
     }
-    return items.find((i) => !i.done) ?? items[0] ?? null;
+    return (
+      items.find((i) => !i.done && !i.skipped) ??
+      items.find((i) => !i.done) ??
+      items[0] ??
+      null
+    );
   }, [items, focusKey]);
 
-  const pendingCount = items.filter((i) => !i.done).length;
-  const doneCount = items.length - pendingCount;
-  const apiCapable = items.some((i) => !i.done && i.apiGenerate);
+  const doneCount = items.filter((i) => i.done).length;
+  const skippedCount = items.filter((i) => !i.done && i.skipped).length;
+  const pendingCount = items.length - doneCount - skippedCount;
+  const apiCapable = items.some((i) => !i.done && !i.skipped && i.apiGenerate);
+  // Reorder affordance bounds: position of the current unit within its active kind group.
+  const moveGroup = current ? items.filter((i) => i.kind === current.kind && !i.done && !i.skipped) : [];
+  const movePos = current ? moveGroup.findIndex((i) => i.key === current.key) : -1;
+  const canMoveUp = movePos > 0;
+  const canMoveDown = movePos >= 0 && movePos < moveGroup.length - 1;
 
   // Load the current item's prompt whenever it changes.
   useEffect(() => {
@@ -111,7 +126,9 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   const advance = useCallback(() => {
     const list = itemsRef.current;
     const idx = current ? list.findIndex((i) => i.key === current.key) : -1;
-    const next = list.slice(idx + 1).find((i) => !i.done) ?? list.find((i) => !i.done && i.key !== current?.key);
+    const active = (i: StudioItem) => !i.done && !i.skipped;
+    const next =
+      list.slice(idx + 1).find(active) ?? list.find((i) => active(i) && i.key !== current?.key);
     if (next) setFocusKey(next.key);
   }, [current]);
 
@@ -142,6 +159,53 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       setTimeout(() => setCopied(false), 1500);
     });
   }, [prompt]);
+
+  // Persist skip/unskip of the current unit; after skipping, move on.
+  const toggleSkip = useCallback(async () => {
+    if (!current) return;
+    const wasSkipped = current.skipped;
+    setBusy(true);
+    setError(null);
+    try {
+      await current.setSkipped(!wasSkipped);
+      await onRefresh();
+      await tick();
+      if (!wasSkipped) advance(); // just skipped → jump to the next active unit
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setBusy(false);
+    }
+  }, [current, onRefresh, advance]);
+
+  // Reorder the current unit within its kind group by swapping queue priority
+  // with the adjacent active sibling (queue-only; never touches narrative order).
+  const move = useCallback(
+    async (dir: -1 | 1) => {
+      if (!current) return;
+      const list = itemsRef.current;
+      const group = list.filter((i) => i.kind === current.kind && !i.done && !i.skipped);
+      const pos = group.findIndex((i) => i.key === current.key);
+      const neighbor = group[pos + dir];
+      if (pos < 0 || !neighbor) return;
+      const eff = (i: StudioItem) => i.queuePriority ?? list.findIndex((x) => x.key === i.key);
+      const a = eff(current);
+      const b = eff(neighbor);
+      setBusy(true);
+      setError(null);
+      try {
+        await current.setPriority(b);
+        await neighbor.setPriority(a);
+        await onRefresh();
+        await tick();
+      } catch (e) {
+        setError(String(e instanceof Error ? e.message : e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [current, onRefresh],
+  );
 
   // Global paste → advance (image items only, manual mode).
   useEffect(() => {
@@ -194,7 +258,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     try {
       let first = true;
       while (!stopRef.current) {
-        const next = itemsRef.current.find((i) => !i.done && i.apiGenerate);
+        const next = itemsRef.current.find((i) => !i.done && !i.skipped && i.apiGenerate);
         if (!next) break;
         if (!first) await waitRate(rateRef.current);
         if (stopRef.current) break;
@@ -246,6 +310,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           </div>
           <p className="text-xs text-muted-foreground">
             {doneCount}/{items.length} prontos · {pendingCount} na fila
+            {skippedCount > 0 && ` · ${skippedCount} pulados`}
             {sessionCount > 0 && ` · ${sessionCount} gerados nesta sessão`}
           </p>
         </div>
@@ -402,16 +467,44 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           {/* manual nav */}
-          {!apiRunning && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={advance} className="gap-1">
-                <SkipForward className="h-4 w-4" /> Pular
-              </Button>
-              {current && (
-                <Button variant="ghost" size="sm" onClick={() => setFocusKey(current.key)} className="gap-1">
-                  <RotateCcw className="h-4 w-4" /> Refazer este
+          {!apiRunning && current && (
+            <div className="flex flex-wrap items-center gap-1">
+              {current.skipped ? (
+                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} disabled={busy} className="gap-1">
+                  <PlayCircle className="h-4 w-4" /> Retomar
+                </Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} disabled={busy} className="gap-1">
+                  <SkipForward className="h-4 w-4" /> Pular
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={advance} className="gap-1">
+                <ChevronRight className="h-4 w-4" /> Próximo
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setFocusKey(current.key)} className="gap-1">
+                <RotateCcw className="h-4 w-4" /> Refazer este
+              </Button>
+              <span className="mx-1 h-4 w-px bg-border" />
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Mover antes na fila"
+                disabled={busy || !canMoveUp}
+                onClick={() => void move(-1)}
+                className="h-8 w-8"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Mover depois na fila"
+                disabled={busy || !canMoveDown}
+                onClick={() => void move(1)}
+                className="h-8 w-8"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
@@ -433,10 +526,13 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
                   ? 'bg-primary text-primary-foreground'
                   : it.done
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/70',
+                    : it.skipped
+                      ? 'bg-muted/50 text-muted-foreground/60 line-through'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/70',
               )}
             >
-              {it.done ? '●' : '○'} {it.label.length > 16 ? it.label.slice(0, 15) + '…' : it.label}
+              {it.done ? '●' : it.skipped ? '⤓' : '○'}{' '}
+              {it.label.length > 16 ? it.label.slice(0, 15) + '…' : it.label}
             </button>
           ))}
         </div>

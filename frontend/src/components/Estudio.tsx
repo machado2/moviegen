@@ -28,18 +28,24 @@ export interface EstudioProps {
   onRefresh: () => void | Promise<void>;
   /** Label of the medium, e.g. "Filme" / "HQ". */
   emptyHint?: string;
+  /** When set, the loop opens on this item (e.g. jumped from the Storyboard). */
+  initialFocusKey?: string;
 }
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 60));
 
-export function Estudio({ items: rawItems, onRefresh, emptyHint }: EstudioProps) {
+export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey }: EstudioProps) {
   const items = useMemo(() => orderStudioItems(rawItems), [rawItems]);
   const itemsRef = useRef(items);
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
-  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [focusKey, setFocusKey] = useState<string | null>(initialFocusKey ?? null);
+  // Honor an externally-requested focus (e.g. "produzir este" from the Storyboard).
+  useEffect(() => {
+    if (initialFocusKey) setFocusKey(initialFocusKey);
+  }, [initialFocusKey]);
   const [prompt, setPrompt] = useState<string>('');
   const [promptLoading, setPromptLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -342,6 +348,20 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint }: EstudioProps)
             >
               {busy ? (
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              ) : current?.done && current.thumbnailUrl ? (
+                <>
+                  <img src={current.thumbnailUrl} alt={current.label} className="max-h-40 rounded" />
+                  <p className="text-muted-foreground">
+                    Já gerado. {current.accepts === 'image' ? 'Cole/arraste' : 'Envie um arquivo'} para substituir.
+                  </p>
+                </>
+              ) : current?.done ? (
+                <>
+                  <Check className="h-8 w-8 text-emerald-500" />
+                  <p className="text-muted-foreground">
+                    Já gerado. {current.accepts === 'image' ? 'Cole/arraste' : 'Envie um arquivo'} para substituir.
+                  </p>
+                </>
               ) : current?.accepts === 'image' ? (
                 <>
                   <Clipboard className="h-8 w-8 text-muted-foreground" />

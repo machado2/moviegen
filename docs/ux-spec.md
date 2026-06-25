@@ -465,12 +465,15 @@ trabalho avança).
   quadros via codex na HQ).
 - **Pipeline dashboard** (§5): visão inicial com estados por etapa e atalhos
   para o Estúdio/Montagem, derivada da mesma fila do Estúdio.
+- **Rail lateral persistente** (§3): a navegação é um rail lateral compartilhado
+  (`ProjectShell`) ordenado por pipeline, idêntico nos dois meios; vira barra
+  horizontal rolável em telas estreitas.
+- **Storyboard espacial** (§9): grade de miniaturas por seção (referências e
+  sequência), com lightbox para revisar e "produzir este" que salta direto para
+  o item correspondente no Estúdio.
 
 **Ainda por fazer:**
-- Converter a barra de abas em rail lateral persistente (hoje é uma barra de
-  abas já ordenada por pipeline).
-- Storyboard espacial (§9) e renomear as tabelas de assets para "Elenco &
-  Cenários" (§8).
+- Renomear/redesenhar as tabelas de assets cruas para "Elenco & Cenários" (§8).
 - Persistir overrides de ordem/pular por unidade na fila (§7.1).
 - Rastreio de custo real por item (§13) — depende de expor custo nas chamadas de
   geração.

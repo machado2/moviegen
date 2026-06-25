@@ -1,4 +1,15 @@
 import { useState } from 'react';
+import {
+  Clapperboard,
+  Film,
+  History as HistoryIcon,
+  Image as ImageIcon,
+  LayoutDashboard,
+  LayoutGrid,
+  Settings2,
+  Users,
+  Wand2,
+} from 'lucide-react';
 import { useProject } from '@/hooks/useProject';
 import { useFilmStudioItems } from '@/hooks/useStudioQueue';
 import { Overview } from '@/pages/Overview';
@@ -7,22 +18,34 @@ import { Assets } from '@/pages/Assets';
 import { Scenes } from '@/pages/Scenes';
 import { Assembly } from '@/pages/Assembly';
 import { Estudio } from '@/components/Estudio';
+import { Storyboard } from '@/components/Storyboard';
 import { Pipeline } from '@/components/Pipeline';
 import { History } from '@/components/History';
+import { ProjectShell, type NavItem } from '@/components/ProjectShell';
 import { api } from '@/api/client';
-import { cn } from '@/lib/utils';
 
-type Tab = 'pipeline' | 'overview' | 'studio' | 'characters' | 'assets' | 'scenes' | 'assembly' | 'history';
+type Tab =
+  | 'pipeline'
+  | 'overview'
+  | 'studio'
+  | 'storyboard'
+  | 'characters'
+  | 'assets'
+  | 'scenes'
+  | 'assembly'
+  | 'history';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'pipeline', label: 'Pipeline' },
-  { id: 'overview', label: 'Projeto' },
-  { id: 'studio', label: 'Estúdio' },
-  { id: 'characters', label: 'Personagens' },
-  { id: 'assets', label: 'Assets' },
-  { id: 'scenes', label: 'Cenas' },
-  { id: 'assembly', label: 'Montagem' },
-  { id: 'history', label: 'Histórico' },
+const ic = 'h-4 w-4';
+const NAV: NavItem[] = [
+  { id: 'pipeline', label: 'Pipeline', icon: <LayoutDashboard className={ic} /> },
+  { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
+  { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
+  { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
+  { id: 'characters', label: 'Personagens', icon: <Users className={ic} /> },
+  { id: 'assets', label: 'Assets', icon: <ImageIcon className={ic} /> },
+  { id: 'scenes', label: 'Cenas', icon: <Film className={ic} /> },
+  { id: 'assembly', label: 'Montagem', icon: <Clapperboard className={ic} /> },
+  { id: 'history', label: 'Histórico', icon: <HistoryIcon className={ic} /> },
 ];
 
 interface FilmAppProps {
@@ -31,7 +54,12 @@ interface FilmAppProps {
 
 export function FilmApp({ projectId }: FilmAppProps) {
   const [tab, setTab] = useState<Tab>('pipeline');
+  const [studioFocus, setStudioFocus] = useState<string | undefined>(undefined);
   const { project, reload: reloadProject } = useProject(projectId);
+  const produce = (key: string) => {
+    setStudioFocus(key);
+    setTab('studio');
+  };
   const { items, loading: queueLoading, reload: reloadQueue } = useFilmStudioItems(
     projectId,
     () => void reloadProject(),
@@ -42,26 +70,8 @@ export function FilmApp({ projectId }: FilmAppProps) {
   }
 
   return (
-    <>
-      <nav className="-mx-4 flex gap-1 overflow-x-auto border-b px-4">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              tab === t.id
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="pt-4">
+    <ProjectShell nav={NAV} active={tab} onNavigate={(id) => setTab(id as Tab)}>
+      <>
         {tab === 'pipeline' && (
           <Pipeline
             items={items}
@@ -80,9 +90,11 @@ export function FilmApp({ projectId }: FilmAppProps) {
             <Estudio
               items={items}
               onRefresh={reloadQueue}
+              initialFocusKey={studioFocus}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}
+        {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onProduce={produce} />}
         {tab === 'characters' && <Characters projectId={project.id} />}
         {tab === 'assets' && <Assets projectId={project.id} />}
         {tab === 'scenes' && <Scenes project={project} />}
@@ -94,8 +106,8 @@ export function FilmApp({ projectId }: FilmAppProps) {
             onRestored={() => void reloadProject()}
           />
         )}
-      </main>
-    </>
+      </>
+    </ProjectShell>
   );
 }
 

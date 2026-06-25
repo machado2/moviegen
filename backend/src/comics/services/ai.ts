@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
 import type { ComicsProject, ParsedComicsScript } from '@mediagen/types';
-import { CODEX_BIN, OPENROUTER_BASE } from '../../config.js';
+import { CODEX_BIN, LLM_BASE_URL } from '../../config.js';
 import { HttpError } from '../../lib/errors.js';
 import { getAiConfig } from '../../services/settings.js';
 import { validateParsedComicsScript } from '../validate.js';
@@ -27,13 +27,12 @@ async function chat(
   const signal = AbortSignal.timeout(CHAT_TIMEOUT_MS);
   const stream = onChunk !== undefined;
   try {
-    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
       method: 'POST',
       signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://mediagen.local',
         'X-Title': 'ComicsGen',
       },
       body: JSON.stringify({
@@ -48,19 +47,19 @@ async function chat(
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new HttpError(502, `OpenRouter request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
+      throw new HttpError(502, `LLM gateway request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
     }
 
     if (!stream) {
       const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const content = json.choices?.[0]?.message?.content;
-      if (!content) throw new HttpError(502, 'OpenRouter returned no content');
+      if (!content) throw new HttpError(502, 'LLM gateway returned no content');
       return content;
     }
 
     // Streaming: parse SSE lines, accumulate delta.content, call onChunk
     // throttled to at most once per 500ms so we don't flood SSE.
-    if (!res.body) throw new HttpError(502, 'OpenRouter streaming response has no body');
+    if (!res.body) throw new HttpError(502, 'LLM gateway streaming response has no body');
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -75,7 +74,7 @@ async function chat(
       buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        // OpenRouter keepalive comments start with `:` — skip them.
+        // LLM gateway keepalive comments start with `:` — skip them.
         if (!line.startsWith('data: ')) continue;
         const raw = line.slice(6).trim();
         if (raw === '[DONE]') continue;
@@ -94,7 +93,7 @@ async function chat(
       }
     }
 
-    if (!accumulated) throw new HttpError(502, 'OpenRouter streaming returned no content');
+    if (!accumulated) throw new HttpError(502, 'LLM gateway streaming returned no content');
     return accumulated;
   } catch (err) {
     if (err instanceof HttpError) throw err;
@@ -104,7 +103,7 @@ async function chat(
         `O modelo "${model}" não respondeu em ${CHAT_TIMEOUT_MS / 60000} min. Tente um modelo de parse mais rápido ou um roteiro menor.`,
       );
     }
-    throw new HttpError(502, `OpenRouter request failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw new HttpError(502, `LLM gateway request failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

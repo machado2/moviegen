@@ -7,7 +7,7 @@ export interface UseSettingsResult {
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
-  update: (patch: { openrouterApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => Promise<void>;
+  update: (patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => Promise<void>;
 }
 
 export function useSettings(): UseSettingsResult {
@@ -29,7 +29,7 @@ export function useSettings(): UseSettingsResult {
 
   useEffect(() => { void reload(); }, [reload]);
 
-  const update = useCallback(async (patch: { openrouterApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => {
+  const update = useCallback(async (patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }) => {
     const updated = await api.settings.update(patch);
     setSettings(updated);
   }, []);

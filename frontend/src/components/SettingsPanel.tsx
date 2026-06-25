@@ -38,7 +38,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     setSaving(true);
     setError(null);
     try {
-      await update({ openrouterApiKey: apiKey.trim() || null });
+      await update({ llmApiKey: apiKey.trim() || null });
       setApiKey('');
       setEditingKey(false);
     } catch (e) {
@@ -52,7 +52,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     setSaving(true);
     setError(null);
     try {
-      await update({ openrouterApiKey: null });
+      await update({ llmApiKey: null });
       setEditingKey(false);
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
@@ -86,7 +86,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         <div className="space-y-6 pt-2">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Label>Chave OpenRouter</Label>
+              <Label>Chave do gateway LLM</Label>
               {settings && (
                 <Badge variant={settings.hasApiKey ? 'success' : 'warning'}>
                   {settings.hasApiKey ? 'configurada' : 'não definida'}
@@ -94,14 +94,18 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               )}
             </div>
 
-            {editingKey ? (
+            {settings?.apiKeyFromEnv ? (
+              <p className="text-sm text-muted-foreground">
+                Fornecida pelo ambiente (<code className="font-mono">LLM_API_KEY</code>) — não editável aqui.
+              </p>
+            ) : editingKey ? (
               <div className="flex gap-2">
                 <Input
                   type="text"
                   autoComplete="off"
                   spellCheck={false}
                   value={apiKey}
-                  placeholder={settings?.hasApiKey ? 'cole uma nova chave' : 'sk-or-…'}
+                  placeholder={settings?.hasApiKey ? 'cole uma nova chave' : 'sk-…'}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
                 <Button variant="ghost" onClick={() => { setEditingKey(false); setApiKey(''); }}>
@@ -128,10 +132,11 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             )}
 
             <p className="text-xs text-muted-foreground">
-              Usada por todos os projetos. Armazenada no servidor, nunca retornada ao navegador.
+              Chave única do gateway LiteLLM (rota os modelos para os provedores reais). Usada por
+              todos os projetos, armazenada no servidor e nunca retornada ao navegador.
             </p>
 
-            {editingKey && (
+            {!settings?.apiKeyFromEnv && editingKey && (
               <Button onClick={() => void saveKey()} disabled={saving || !apiKey.trim()}>
                 <Save className="h-4 w-4" /> Salvar chave
               </Button>

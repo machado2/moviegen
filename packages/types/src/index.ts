@@ -235,6 +235,8 @@ export type ProjectDTO = Project;
 export interface AppSettingsDTO {
   hasApiKey: boolean;
   apiKeyHint: string | null;
+  /** True when the gateway key comes from the LLM_API_KEY env (not editable in the UI). */
+  apiKeyFromEnv: boolean;
   parseModel: string;
   ttsModel: string;
 }

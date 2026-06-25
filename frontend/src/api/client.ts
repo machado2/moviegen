@@ -421,7 +421,7 @@ export const settingsApi = {
   get(): Promise<AppSettingsDTO> {
     return request('/settings');
   },
-  update(patch: { openrouterApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }): Promise<AppSettingsDTO> {
+  update(patch: { llmApiKey?: string | null; parseModel?: string | null; ttsModel?: string | null }): Promise<AppSettingsDTO> {
     return request('/settings', { method: 'PATCH', body: json(patch) });
   },
 };

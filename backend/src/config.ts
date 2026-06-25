@@ -20,7 +20,20 @@ export const PUBLIC_DIR = process.env.PUBLIC_DIR
 
 export const DEFAULT_PARSE_MODEL = 'google/gemini-2.5-pro';
 export const DEFAULT_TTS_MODEL = 'openai/gpt-4o-mini-tts';
-export const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+
+// LLM gateway (LiteLLM, OpenAI-compatible) — the single entry point for all
+// model calls. It's a drop-in replacement for OpenRouter: the same
+// /chat/completions API and the same model names (e.g. "google/gemini-2.5-pro"),
+// forwarded to OpenRouter by the gateway. Apps only swap base_url + key; the
+// gateway holds the real provider keys.
+//
+// mediagen runs on the LAN minipc (outside the homeops docker network), so the
+// default is the public endpoint. On-box, set LLM_BASE_URL to
+// http://homeops-litellm:4000/v1.
+export const LLM_BASE_URL = (process.env.LLM_BASE_URL ?? 'https://llm.fbmac.net/v1').replace(/\/+$/, '');
+// Single gateway key (LiteLLM master key). Injected by the deploy env; when
+// empty, falls back to the key stored via Settings.
+export const LLM_API_KEY = process.env.LLM_API_KEY ?? '';
 
 // Maximum shot duration in seconds — the natural limit of current AI video models.
 export const MAX_SHOT_SECONDS = 15;

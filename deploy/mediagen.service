@@ -1,0 +1,32 @@
+# systemd unit for the MediaGen server (film + comics).
+#
+# Installs the server as a persistent service so a VM/host reboot brings it back
+# automatically, with the LLM gateway key loaded from a persistent, gitignored
+# .env (so the parse/generation survives restarts — see TASK-3). Adjust User and
+# the two paths if the checkout lives elsewhere.
+#
+# Install (as root):
+#   cp deploy/mediagen.service /etc/systemd/system/mediagen.service
+#   systemctl daemon-reload
+#   systemctl enable --now mediagen
+# Inspect:  systemctl status mediagen   journalctl -u mediagen -f
+
+[Unit]
+Description=MediaGen production server (film + comics)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fabio
+WorkingDirectory=/home/fabio/src/mediagen
+# Secrets + config (LLM_API_KEY, optionally LLM_BASE_URL, DATA_DIR) live only in
+# this persistent, gitignored file. systemd sets them in the process env; the
+# app's own loader (backend/src/env.ts) would also read it when run by hand.
+EnvironmentFile=/home/fabio/src/mediagen/.env
+ExecStart=/usr/bin/env node dist/server.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

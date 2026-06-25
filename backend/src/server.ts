@@ -1,3 +1,6 @@
+// Load a persistent .env before anything reads process.env (config.ts does so
+// at module load). Must stay the first import — see env.ts.
+import './env.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';

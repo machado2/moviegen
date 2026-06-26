@@ -242,6 +242,16 @@ A geração de prompt **por LLM** (`services/ai.ts generateImagePrompt`) fica no
 backend de propósito: não é determinística (é uma chamada de inferência); ela
 *usa* o gateway e pode partir do template puro de `@mediagen/core`.
 
+### Duplicação filme/HQ
+
+Os dois stacks são largamente espelhados (asset, project, archive, parseAgent…).
+Primeira espinha comum extraída: as **regras de variante** (migração legada,
+transições de status, sincronizar `file`, limpar seleção ao excluir) vivem em
+`storage/variants.ts` (puras), usadas pelos dois `asset.ts` — o load/save/commit
+e o layout de arquivo continuam explícitos por stack. Candidatos seguintes:
+helpers genéricos de storage (resolve/commit/history duplicados em `comics/storage.ts`),
+e o serviço de asset CRUD.
+
 ### Próximo passo definido: o módulo de "formato em disco"
 
 Formalizar uma camada de **persistência (repository)** que seja a única dona do

@@ -1,32 +1,15 @@
 import type { Asset, AssetRole, AssetStatus, AssetType, AssetVariant } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
+import {
+  listVariantFiles,
+  migrateVariants,
+  recordVariant,
+  removeVariant,
+  selectVariant,
+} from '../storage/variants.js';
 import { getProject, saveProject } from './project.js';
 import { newId, nowIso } from '../lib/ids.js';
 import { badRequest, notFound } from '../lib/errors.js';
-
-// `asset.file` is the single source of truth that the rest of the app reads, so
-// it always mirrors the selected variant. Legacy assets (a bare `file`, no
-// variants) are migrated lazily into a one-variant list on first touch.
-// Stable id for the variant synthesized from a legacy single `file`, so the id
-// a client sees on a read path (list) still resolves on a later select/serve
-// even before the migration is persisted by the next write.
-const LEGACY_VARIANT_ID = 'var_legacy';
-
-function migrateVariants(asset: Asset): boolean {
-  if (!asset.variants) asset.variants = [];
-  if (asset.variants.length === 0 && asset.file) {
-    const v: AssetVariant = { id: LEGACY_VARIANT_ID, file: asset.file, createdAt: nowIso(), source: 'upload' };
-    asset.variants.push(v);
-    asset.selectedVariantId = v.id;
-    return true;
-  }
-  return false;
-}
-
-function syncSelectedFile(asset: Asset): void {
-  const v = asset.variants?.find((x) => x.id === asset.selectedVariantId);
-  asset.file = v ? v.file : null;
-}
 
 export async function listAssets(projectId: string): Promise<Asset[]> {
   const project = await getProject(projectId);
@@ -96,10 +79,7 @@ export async function deleteAsset(projectId: string, assetId: string): Promise<v
   if (!asset) throw notFound('Asset');
   delete project.assets[assetId];
   await saveProject(project);
-  // Remove every produced file (all variants + the legacy single file).
-  const files = new Set<string>(asset.variants?.map((v) => v.file) ?? []);
-  if (asset.file) files.add(asset.file);
-  for (const rel of files) await fs.remove(fs.resolveInProject(projectId, rel));
+  for (const rel of listVariantFiles(asset)) await fs.remove(fs.resolveInProject(projectId, rel));
   await fs.commitProject(projectId, `asset removido: ${assetId}`);
 }
 
@@ -121,7 +101,6 @@ export async function addAssetVariant(
   const project = await getProject(projectId);
   const asset = project.assets[assetId];
   if (!asset) throw notFound('Asset');
-  migrateVariants(asset);
   const variantId = newId('var');
   const rel = fs.assetRelPath(assetId, variantId, input.originalName);
   await fs.writeBuffer(fs.resolveInProject(projectId, rel), input.data);
@@ -133,12 +112,7 @@ export async function addAssetVariant(
     generationPrompt: input.generationPrompt,
     generationModel: input.generationModel,
   };
-  asset.variants!.push(variant);
-  if (input.autoSelect) {
-    asset.selectedVariantId = variantId;
-    if (asset.status === 'pending') asset.status = 'active';
-  }
-  syncSelectedFile(asset);
+  recordVariant(asset, variant, input.autoSelect ?? false);
   await saveProject(project);
   await fs.commitProject(projectId, `variante: ${assetId}`);
   return { asset, variant };
@@ -174,13 +148,7 @@ export async function selectAssetVariant(
   const project = await getProject(projectId);
   const asset = project.assets[assetId];
   if (!asset) throw notFound('Asset');
-  migrateVariants(asset);
-  if (variantId !== null && !asset.variants!.some((v) => v.id === variantId)) {
-    throw badRequest('No such variant on this asset');
-  }
-  asset.selectedVariantId = variantId;
-  if (variantId && asset.status === 'pending') asset.status = 'active';
-  syncSelectedFile(asset);
+  selectVariant(asset, variantId);
   await saveProject(project);
   await fs.commitProject(projectId, `seleção de variante: ${assetId}`);
   return asset;
@@ -194,12 +162,7 @@ export async function deleteAssetVariant(
   const project = await getProject(projectId);
   const asset = project.assets[assetId];
   if (!asset) throw notFound('Asset');
-  migrateVariants(asset);
-  const variant = asset.variants!.find((v) => v.id === variantId);
-  if (!variant) throw notFound('Variant');
-  asset.variants = asset.variants!.filter((v) => v.id !== variantId);
-  if (asset.selectedVariantId === variantId) asset.selectedVariantId = null;
-  syncSelectedFile(asset);
+  const variant = removeVariant(asset, variantId);
   await saveProject(project);
   await fs.remove(fs.resolveInProject(projectId, variant.file));
   await fs.commitProject(projectId, `variante removida: ${assetId}`);

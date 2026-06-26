@@ -1,22 +1,25 @@
-// Agentic screenplay parser. Instead of one blocking "return the whole JSON"
-// call, the model builds the structure incrementally through tool calls
-// (set_metadata / add_character / add_scene / add_shot / finish). Each tool call
-// is a visible step (live progress + a step log), the cost is metered per round
-// (and the cap is honoured), and a cancellation aborts the in-flight round and
-// stops the loop. Far more robust than the one-shot call — a malformed piece is
-// rejected per-tool and the model can correct it instead of failing wholesale.
+// Agentic screenplay parser, built on the Vercel AI SDK. Instead of one blocking
+// "return the whole JSON" call, the model builds the structure incrementally
+// through tool calls (set_metadata / add_character / add_scene / add_shot /
+// finish). Each tool call is a visible step (live progress + a step log), the
+// cost is metered (and the cap is honoured mid-loop), and a cancellation aborts
+// the in-flight call and stops the loop. Far more robust than the one-shot call:
+// a malformed piece is rejected per-tool and the model can correct it instead of
+// failing wholesale.
+//
+// The SDK owns the multi-step tool loop (stopWhen), streaming, retries and
+// cancellation. We keep two project-specific concerns: live per-step progress
+// (emitted from each tool's execute) and dollar metering + the spend cap, which
+// we enforce by intercepting the gateway's per-response cost header in a custom
+// fetch and aborting the run the moment the cap is crossed.
 
-import type {
-  DialogueLine,
-  ParsedCharacter,
-  ParsedScene,
-  ParsedScript,
-  ParsedShot,
-  Project,
-} from '@mediagen/types';
+import type { DialogueLine, ParsedScene, ParsedScript, ParsedShot, Project } from '@mediagen/types';
+import { generateText, hasToolCall, stepCountIs, tool } from 'ai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { z } from 'zod';
+import { LLM_BASE_URL } from '../config.js';
 import { getAiConfig } from './settings.js';
-import { assertUnderCap, recordSpend } from './spend.js';
-import { chatWithTools, type AgentMessage } from './ai.js';
+import { assertUnderCap, getSpend, recordSpend } from './spend.js';
 import { projectDir } from '../storage/filesystem.js';
 import { HttpError } from '../lib/errors.js';
 import { validateParsedScript } from '../lib/validate.js';
@@ -24,102 +27,27 @@ import { validateParsedScript } from '../lib/validate.js';
 const MAX_ROUNDS = 120;
 const MAX_SCENES = 500;
 const MAX_SHOTS = 6000;
+// A full screenplay can legitimately take minutes across many tool rounds; cap
+// the whole run generously so a stalled connection can't hang the job forever.
+const RUN_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** Progress callback — same shape as a JobHandle.update. */
 export type StepFn = (progress: number, message: string) => void;
 
-const TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'set_metadata',
-      description: 'Set the film-level metadata. Call once, first.',
-      parameters: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          language: { type: 'string', description: 'BCP-47, e.g. "pt-BR"' },
-          globalStyle: { type: 'string', description: 'overall visual style' },
-        },
-        required: ['title', 'globalStyle'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'add_character',
-      description: 'Add one character. id is a lowercase slug, stable across shots.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          name: { type: 'string' },
-          description: { type: 'string' },
-          voiceDescription: { type: 'string', description: 'tone, age, accent, pace — for TTS' },
-        },
-        required: ['id', 'name'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'add_scene',
-      description: 'Add one scene. Call before its shots.',
-      parameters: {
-        type: 'object',
-        properties: {
-          number: { type: 'integer' },
-          shortTitle: { type: 'string', description: 'concise human label, e.g. "Brejo - Dawn"' },
-          slugTitle: { type: 'string', description: 'screenplay slug line' },
-          summary: { type: 'string' },
-          continuityIn: { type: 'string' },
-          continuityOut: { type: 'string' },
-        },
-        required: ['number', 'shortTitle'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'add_shot',
-      description: 'Add one shot to an existing scene. A shot is a single camera idea, at most 15 seconds.',
-      parameters: {
-        type: 'object',
-        properties: {
-          sceneNumber: { type: 'integer', description: 'the scene this shot belongs to' },
-          order: { type: 'integer' },
-          camera: { type: 'string' },
-          targetDuration: { type: 'string', description: 'e.g. "12s", max "15s"' },
-          action: { type: 'string', description: 'what is seen, for a video generator' },
-          exit: { type: 'string', description: 'event that ends/transitions the shot' },
-          diegeticTexts: { type: 'array', items: { type: 'string' } },
-          sounds: { type: 'array', items: { type: 'string' } },
-          lines: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                speaker: { type: 'string', description: 'character id or "narrator"' },
-                type: { type: 'string', enum: ['dialogue', 'voice-over'] },
-                text: { type: 'string' },
-              },
-              required: ['speaker', 'type', 'text'],
-            },
-          },
-          characterIds: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['sceneNumber', 'order', 'camera', 'action'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: { name: 'finish', description: 'Signal that the whole screenplay has been parsed.', parameters: { type: 'object', properties: {} } },
-  },
-];
+// The gateway reports the real dollar cost of each call in this response header.
+// Parse defensively — missing/blank/non-numeric means "cost unknown", never zero.
+function parseCostHeader(headers: Headers): number | null {
+  const raw = headers.get('x-litellm-response-cost');
+  if (raw == null || raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+interface Builder {
+  result: ParsedScript;
+  sceneByNum: Map<number, ParsedScene>;
+  shotCount: number;
+}
 
 const SYSTEM = `You are a film pre-production assistant. You convert a markdown screenplay into a structured project by CALLING TOOLS — never reply with prose or JSON in the content.
 
@@ -134,105 +62,133 @@ Procedure:
 
 Call several tools per turn when possible. Keep going until you call finish.`;
 
-interface Builder {
-  result: ParsedScript;
-  sceneByNum: Map<number, ParsedScene>;
-  shotCount: number;
-}
-
-function asString(v: unknown): string {
-  return typeof v === 'string' ? v : v == null ? '' : String(v);
-}
-function asArray(v: unknown): unknown[] {
-  return Array.isArray(v) ? v : [];
-}
-
-function applyTool(name: string, rawArgs: string, b: Builder): string {
-  let args: Record<string, unknown>;
-  try {
-    args = JSON.parse(rawArgs || '{}') as Record<string, unknown>;
-  } catch {
-    return 'erro: argumentos não são JSON válido; tente de novo';
-  }
-  switch (name) {
-    case 'set_metadata': {
-      b.result.title = asString(args.title) || b.result.title;
-      if (args.language) b.result.language = asString(args.language);
-      b.result.globalStyle = asString(args.globalStyle) || b.result.globalStyle;
-      return 'ok: metadata';
-    }
-    case 'add_character': {
-      const id = asString(args.id).trim();
-      if (!id) return 'erro: id obrigatório';
-      const character: ParsedCharacter = {
-        id,
-        name: asString(args.name) || id,
-        description: asString(args.description),
-        voiceDescription: asString(args.voiceDescription),
-      };
-      if (!b.result.characters.some((c) => c.id === id)) b.result.characters.push(character);
-      return `ok: personagem ${character.name}`;
-    }
-    case 'add_scene': {
-      const number = Number(args.number);
-      if (!Number.isFinite(number)) return 'erro: number inválido';
-      if (b.result.scenes.length >= MAX_SCENES) return 'erro: limite de cenas atingido';
-      const scene: ParsedScene = {
-        number,
-        shortTitle: asString(args.shortTitle) || `Cena ${number}`,
-        slugTitle: asString(args.slugTitle),
-        summary: asString(args.summary),
-        continuityIn: asString(args.continuityIn),
-        continuityOut: asString(args.continuityOut),
-        shots: [],
-      };
-      if (!b.sceneByNum.has(number)) {
-        b.sceneByNum.set(number, scene);
-        b.result.scenes.push(scene);
-      }
-      return `ok: cena ${number}`;
-    }
-    case 'add_shot': {
-      const sceneNumber = Number(args.sceneNumber);
-      const scene = b.sceneByNum.get(sceneNumber);
-      if (!scene) return `erro: cena ${args.sceneNumber} não existe; chame add_scene antes`;
-      if (b.shotCount >= MAX_SHOTS) return 'erro: limite de shots atingido';
-      const lines: DialogueLine[] = asArray(args.lines).map((l) => {
-        const o = (l ?? {}) as Record<string, unknown>;
-        const type = o.type === 'voice-over' ? 'voice-over' : 'dialogue';
-        return { speaker: asString(o.speaker) || 'narrator', type, text: asString(o.text) };
-      });
-      const shot: ParsedShot = {
-        order: Number(args.order) || scene.shots.length + 1,
-        camera: asString(args.camera),
-        targetDuration: asString(args.targetDuration) || '15s',
-        action: asString(args.action),
-        exit: asString(args.exit),
-        diegeticTexts: asArray(args.diegeticTexts).map(asString),
-        sounds: asArray(args.sounds).map(asString),
-        lines,
-        characterIds: asArray(args.characterIds).map(asString),
-      };
-      scene.shots.push(shot);
-      b.shotCount += 1;
-      return `ok: cena ${sceneNumber} shot ${shot.order}`;
-    }
-    case 'finish':
-      return 'ok: finish';
-    default:
-      return `erro: ferramenta desconhecida ${name}`;
-  }
-}
-
-function stepMessage(name: string, args: Record<string, unknown>): string | null {
-  switch (name) {
-    case 'set_metadata': return `Título: "${asString(args.title)}"`;
-    case 'add_character': return `Personagem: ${asString(args.name) || asString(args.id)}`;
-    case 'add_scene': return `Cena ${asString(args.number)}: ${asString(args.shortTitle)}`;
-    case 'add_shot': return `Cena ${asString(args.sceneNumber)} · Shot ${asString(args.order)}`;
-    case 'finish': return 'Finalizando…';
-    default: return null;
-  }
+function buildTools(b: Builder, onStep: (msg: string) => void) {
+  return {
+    set_metadata: tool({
+      description: 'Set the film-level metadata. Call once, first.',
+      inputSchema: z.object({
+        title: z.string(),
+        language: z.string().optional().describe('BCP-47, e.g. "pt-BR"'),
+        globalStyle: z.string().describe('overall visual style'),
+      }),
+      execute: async ({ title, language, globalStyle }) => {
+        b.result.title = title || b.result.title;
+        if (language) b.result.language = language;
+        b.result.globalStyle = globalStyle || b.result.globalStyle;
+        onStep(`Título: "${title}"`);
+        return 'ok: metadata';
+      },
+    }),
+    add_character: tool({
+      description: 'Add one character. id is a lowercase slug, stable across shots.',
+      inputSchema: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        voiceDescription: z.string().optional().describe('tone, age, accent, pace — for TTS'),
+      }),
+      execute: async ({ id, name, description, voiceDescription }) => {
+        const slug = id.trim();
+        if (!slug) return 'erro: id obrigatório';
+        if (!b.result.characters.some((c) => c.id === slug)) {
+          b.result.characters.push({
+            id: slug,
+            name: name || slug,
+            description: description ?? '',
+            voiceDescription: voiceDescription ?? '',
+          });
+        }
+        onStep(`Personagem: ${name || slug}`);
+        return `ok: personagem ${name || slug}`;
+      },
+    }),
+    add_scene: tool({
+      description: 'Add one scene. Call before its shots.',
+      inputSchema: z.object({
+        number: z.number().int(),
+        shortTitle: z.string().describe('concise human label, e.g. "Brejo - Dawn"'),
+        slugTitle: z.string().optional().describe('screenplay slug line'),
+        summary: z.string().optional(),
+        continuityIn: z.string().optional(),
+        continuityOut: z.string().optional(),
+      }),
+      execute: async ({ number, shortTitle, slugTitle, summary, continuityIn, continuityOut }) => {
+        if (!Number.isFinite(number)) return 'erro: number inválido';
+        if (b.result.scenes.length >= MAX_SCENES) return 'erro: limite de cenas atingido';
+        if (!b.sceneByNum.has(number)) {
+          const scene: ParsedScene = {
+            number,
+            shortTitle: shortTitle || `Cena ${number}`,
+            slugTitle: slugTitle ?? '',
+            summary: summary ?? '',
+            continuityIn: continuityIn ?? '',
+            continuityOut: continuityOut ?? '',
+            shots: [],
+          };
+          b.sceneByNum.set(number, scene);
+          b.result.scenes.push(scene);
+        }
+        onStep(`Cena ${number}: ${shortTitle}`);
+        return `ok: cena ${number}`;
+      },
+    }),
+    add_shot: tool({
+      description: 'Add one shot to an existing scene. A shot is a single camera idea, at most 15 seconds.',
+      inputSchema: z.object({
+        sceneNumber: z.number().int().describe('the scene this shot belongs to'),
+        order: z.number().int(),
+        camera: z.string(),
+        targetDuration: z.string().optional().describe('e.g. "12s", max "15s"'),
+        action: z.string().describe('what is seen, for a video generator'),
+        exit: z.string().optional().describe('event that ends/transitions the shot'),
+        diegeticTexts: z.array(z.string()).optional(),
+        sounds: z.array(z.string()).optional(),
+        lines: z
+          .array(
+            z.object({
+              speaker: z.string().describe('character id or "narrator"'),
+              type: z.enum(['dialogue', 'voice-over']),
+              text: z.string(),
+            }),
+          )
+          .optional(),
+        characterIds: z.array(z.string()).optional(),
+      }),
+      execute: async (args) => {
+        const scene = b.sceneByNum.get(args.sceneNumber);
+        if (!scene) return `erro: cena ${args.sceneNumber} não existe; chame add_scene antes`;
+        if (b.shotCount >= MAX_SHOTS) return 'erro: limite de shots atingido';
+        const lines: DialogueLine[] = (args.lines ?? []).map((l) => ({
+          speaker: l.speaker || 'narrator',
+          type: l.type === 'voice-over' ? 'voice-over' : 'dialogue',
+          text: l.text ?? '',
+        }));
+        const shot: ParsedShot = {
+          order: args.order || scene.shots.length + 1,
+          camera: args.camera ?? '',
+          targetDuration: args.targetDuration || '15s',
+          action: args.action ?? '',
+          exit: args.exit ?? '',
+          diegeticTexts: args.diegeticTexts ?? [],
+          sounds: args.sounds ?? [],
+          lines,
+          characterIds: args.characterIds ?? [],
+        };
+        scene.shots.push(shot);
+        b.shotCount += 1;
+        onStep(`Cena ${args.sceneNumber} · Shot ${shot.order}`);
+        return `ok: cena ${args.sceneNumber} shot ${shot.order}`;
+      },
+    }),
+    finish: tool({
+      description: 'Signal that the whole screenplay has been parsed.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        onStep('Finalizando…');
+        return 'ok: finish';
+      },
+    }),
+  };
 }
 
 export async function parseScriptAgentic(
@@ -251,49 +207,75 @@ export async function parseScriptAgentic(
     shotCount: 0,
   };
   const estimate = () => Math.min(0.94, 0.15 + b.result.scenes.length * 0.02 + b.shotCount * 0.004);
+  const emit = (msg: string) => onStep?.(estimate(), msg);
 
-  const messages: AgentMessage[] = [
-    { role: 'system', content: SYSTEM },
-    { role: 'user', content: `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${markdown}` },
-  ];
+  // Cap enforcement is best-effort and mid-loop: the gateway reports each call's
+  // cost in a response header, which we accumulate in a custom fetch. The moment
+  // prior-spend + this-run crosses the cap, we abort the whole run.
+  const priorSpend = spendCapUsd != null ? (await getSpend(dir, spendCapUsd)).totalUsd : 0;
+  let runSpend = 0;
+  let capHit = false;
+  const capController = new AbortController();
 
-  let finished = false;
-  let emptyRounds = 0;
-  for (let round = 0; round < MAX_ROUNDS && !finished; round++) {
-    if (signal?.aborted) throw new HttpError(499, 'Cancelado');
-    onStep?.(
-      estimate(),
-      round === 0
-        ? 'Lendo o roteiro e montando a estrutura…'
-        : `Processando… ${b.result.scenes.length} cenas · ${b.shotCount} shots`,
-    );
-
-    const { message, spend } = await chatWithTools(apiKey, model, messages, TOOLS, signal);
-    await recordSpend(dir, spend);
-    await assertUnderCap(dir, spendCapUsd);
-    messages.push(message);
-
-    const calls = message.tool_calls ?? [];
-    if (calls.length === 0) {
-      // No tool calls this round — give it one nudge, then stop to avoid looping.
-      if (++emptyRounds >= 2) break;
-      messages.push({ role: 'user', content: 'Continue chamando as ferramentas até terminar; chame finish quando o roteiro inteiro estiver parseado.' });
-      continue;
-    }
-    emptyRounds = 0;
-
-    for (const tc of calls) {
-      const name = tc.function?.name ?? '';
-      const rawArgs = tc.function?.arguments ?? '{}';
-      const out = applyTool(name, rawArgs, b);
-      messages.push({ role: 'tool', tool_call_id: tc.id, content: out });
-      if (!out.startsWith('erro')) {
-        let parsed: Record<string, unknown> = {};
-        try { parsed = JSON.parse(rawArgs || '{}') as Record<string, unknown>; } catch { /* already acked */ }
-        const msg = stepMessage(name, parsed);
-        if (msg) onStep?.(estimate(), msg);
+  const gateway = createOpenAICompatible({
+    name: 'litellm',
+    baseURL: LLM_BASE_URL,
+    apiKey,
+    headers: { 'X-Title': 'MovieGen' },
+    includeUsage: true,
+    fetch: async (input, init) => {
+      const res = await fetch(input, init);
+      const cost = parseCostHeader(res.headers);
+      if (cost != null) {
+        runSpend += cost;
+        if (spendCapUsd != null && priorSpend + runSpend >= spendCapUsd && !capHit) {
+          capHit = true;
+          capController.abort();
+        }
       }
-      if (name === 'finish') finished = true;
+      return res;
+    },
+  });
+
+  const timeout = AbortSignal.timeout(RUN_TIMEOUT_MS);
+  const combined = AbortSignal.any(
+    [signal, capController.signal, timeout].filter((s): s is AbortSignal => Boolean(s)),
+  );
+
+  let usage: { inputTokens?: number; outputTokens?: number } | undefined;
+  try {
+    emit('Lendo o roteiro e montando a estrutura…');
+    const result = await generateText({
+      model: gateway(model),
+      system: SYSTEM,
+      prompt: `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${markdown}`,
+      tools: buildTools(b, (msg) => emit(msg)),
+      // Loop until the model calls finish, capped so a runaway can't spin forever.
+      stopWhen: [hasToolCall('finish'), stepCountIs(MAX_ROUNDS)],
+      abortSignal: combined,
+    });
+    usage = result.totalUsage;
+  } catch (err) {
+    // Distinguish *why* the run aborted so the user gets an actionable message.
+    if (signal?.aborted) throw new HttpError(499, 'Cancelado');
+    if (capHit) {
+      throw new HttpError(
+        402,
+        `Teto de gasto atingido durante o parse (≈US$ ${(priorSpend + runSpend).toFixed(4)}). Aumente o teto em Configurações ou use um modelo mais barato.`,
+      );
+    }
+    if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+      throw new HttpError(504, `O modelo "${model}" não terminou o parse em ${RUN_TIMEOUT_MS / 60000} min.`);
+    }
+    throw new HttpError(502, `Parse via gateway falhou: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    // Record whatever we actually spent, even on abort/timeout.
+    if (runSpend > 0 || usage) {
+      await recordSpend(dir, {
+        costUsd: runSpend > 0 ? runSpend : null,
+        promptTokens: usage?.inputTokens,
+        completionTokens: usage?.outputTokens,
+      });
     }
   }
 

@@ -20,6 +20,7 @@ import { getAiConfig } from '../../services/settings.js';
 import { assertUnderCap, getSpend, recordSpend } from '../../services/spend.js';
 import { makeMeteredGateway } from '../../services/gateway.js';
 import { projectDir } from '../storage.js';
+import { slotFormatFor } from '../layout.js';
 import { HttpError } from '../../lib/errors.js';
 import { validateParsedComicsScript } from '../validate.js';
 
@@ -34,14 +35,6 @@ export type StepFn = (progress: number, message: string) => void;
 // Kept in sync with the comics validators (validate.ts). The model is constrained
 // to these exact values so a parse can't drift from the canonical format.
 const LAYOUTS = ['rows-1', 'rows-2', 'rows-3', 'rows-4', 'grid-2x2', 'grid-2x3', 'grid-2x4', 'top-then-grid-2x2'] as const;
-const SLOT_FORMATS = [
-  'vertical de página inteira, proporção 2:3',
-  'horizontal alto, proporção 4:3',
-  'horizontal panorâmico, proporção 2:1',
-  'horizontal muito panorâmico, proporção 3:1',
-  'vertical, proporção 2:3',
-  'quadrado, proporção 1:1',
-] as const;
 const TEXT_TYPES = ['dialogue', 'offscreen', 'voice-over', 'caption', 'sfx', 'sign', 'title'] as const;
 
 const SYSTEM = `Você é um assistente de pré-produção de HQs / graphic novels. Converte um roteiro markdown em uma estrutura para um pipeline de produção por IA, CHAMANDO FERRAMENTAS — nunca responda com prosa ou JSON no conteúdo.
@@ -50,8 +43,7 @@ Procedimento:
 1. Chame set_metadata uma vez (title, language, globalStyle).
 2. Chame add_character para cada personagem (id = slug minúsculo, estável; description com aparência canônica: idade, etnia, figurino, postura).
 3. Para cada prancha em ordem: chame add_prancha (escolhendo o layout adequado ao número de quadros), depois add_quadro para cada quadro dela.
-   - Layout por nº de quadros: 1 -> "rows-1", 2 -> "rows-2", 3 -> "rows-3", 4 -> "rows-4" ou "grid-2x2", 6 -> "grid-2x3", 8 -> "grid-2x4", 5 -> "top-then-grid-2x2".
-   - slotFormat deve ser coerente com o layout do quadro.
+   - Escolha o layout pelo nº de quadros da prancha: 1 -> "rows-1", 2 -> "rows-2", 3 -> "rows-3", 4 -> "rows-4" ou "grid-2x2", 6 -> "grid-2x3", 8 -> "grid-2x4", 5 -> "top-then-grid-2x2". O formato/proporção de cada quadro é derivado automaticamente do layout — você não escolhe.
    - Preserve os textos do roteiro VERBATIM, com acentuação e pontuação EXATAS; tipifique cada um.
    - Referencie os personagens do quadro por characterIds (os slugs).
    - Descreva composition (composição) e setting (cenário) em prosa imagética.
@@ -127,11 +119,10 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
       },
     }),
     add_quadro: tool({
-      description: 'Adiciona um quadro a uma prancha existente (por número).',
+      description: 'Adiciona um quadro a uma prancha existente (por número). O slotFormat NÃO é informado: é derivado do layout da prancha e da posição do quadro.',
       inputSchema: z.object({
         pranchaNumber: z.number().int().describe('a prancha a que este quadro pertence'),
         order: z.number().int(),
-        slotFormat: z.enum(SLOT_FORMATS),
         composition: z.string().describe('composição do quadro, em prosa imagética'),
         setting: z.string().optional().describe('cenário'),
         characterIds: z.array(z.string()).optional(),
@@ -157,7 +148,9 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
         }));
         const quadro: ParsedQuadro = {
           order: args.order || prancha.quadros.length + 1,
-          slotFormat: args.slotFormat,
+          // Derived from the prancha layout + position (0-based), never the model's
+          // choice — this is what apply re-derives anyway, so keep it coherent here.
+          slotFormat: slotFormatFor(prancha.layout, prancha.quadros.length),
           composition: args.composition ?? '',
           characterIds: args.characterIds ?? [],
           setting: args.setting ?? '',

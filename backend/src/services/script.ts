@@ -9,7 +9,7 @@ import type {
 } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
-import { parseScript } from './ai.js';
+import { parseScriptAgentic } from './parseAgent.js';
 import { jobQueue } from '../jobs/queue.js';
 import { newId, slugify } from '../lib/ids.js';
 import { badRequest, notFound } from '../lib/errors.js';
@@ -34,11 +34,12 @@ export async function startScriptParse(projectId: string): Promise<JobProgress> 
   return jobQueue.start(
     'script-parse',
     async (handle) => {
-      handle.update(0.05, 'Reading screenplay');
+      handle.update(0.05, 'Lendo o roteiro…');
       const markdown = await fs.readText(fs.scriptFile(projectId));
-      handle.update(0.15, 'Parsing screenplay with the model (this can take a few minutes)');
-      const parsed = await parseScript(project, markdown, handle.signal);
-      handle.update(0.95, 'Saving result');
+      // Agentic parse: the model builds the structure via tool calls, emitting a
+      // live step per character/scene/shot through handle.update.
+      const parsed = await parseScriptAgentic(project, markdown, handle.signal, handle.update);
+      handle.update(0.96, 'Salvando resultado…');
       await fs.writeNickel(fs.parsedScriptFile(projectId), parsed);
     },
     parseJobRef(projectId),

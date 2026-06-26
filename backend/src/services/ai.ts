@@ -88,6 +88,65 @@ async function chat(
   }
 }
 
+// ─── Tool-calling chat (for the agentic parser) ──────────────────────────────
+
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+export interface AgentMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+export interface ToolChatResult {
+  message: { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] };
+  spend: SpendRecord;
+}
+
+/** One round of an OpenAI-style tool-calling exchange against the gateway. */
+export async function chatWithTools(
+  apiKey: string,
+  model: string,
+  messages: AgentMessage[],
+  tools: unknown[],
+  signal?: AbortSignal,
+): Promise<ToolChatResult> {
+  const timeout = AbortSignal.timeout(CHAT_TIMEOUT_MS);
+  const sig = signal ? AbortSignal.any([timeout, signal]) : timeout;
+  try {
+    const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      signal: sig,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, 'X-Title': 'MovieGen' },
+      body: JSON.stringify({ model, messages, tools, tool_choice: 'auto' }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new HttpError(502, `LLM gateway request failed (${res.status})`, text ? [text.slice(0, 500)] : undefined);
+    }
+    const costUsd = parseCostHeader(res);
+    const json = (await res.json()) as {
+      choices?: { message?: { role: 'assistant'; content: string | null; tool_calls?: ToolCall[] } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const message = json.choices?.[0]?.message;
+    if (!message) throw new HttpError(502, 'LLM gateway returned no message');
+    return {
+      message,
+      spend: { costUsd, promptTokens: json.usage?.prompt_tokens, completionTokens: json.usage?.completion_tokens },
+    };
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new HttpError(504, `O modelo "${model}" não respondeu em ${CHAT_TIMEOUT_MS / 60000} min.`);
+    }
+    throw new HttpError(502, `LLM gateway request failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function extractJson(raw: string): unknown {
   // Models sometimes wrap JSON in ```json fences or prose. Be forgiving.
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(raw);

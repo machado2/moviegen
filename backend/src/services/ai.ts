@@ -100,17 +100,30 @@ export async function generateImagePrompt(
   const { apiKey, parseModel: model, spendCapUsd } = await getAiConfig();
   const dir = projectDir(project.id);
   await assertUnderCap(dir, spendCapUsd);
-  const style = project.globalStyle ? `Global visual style: ${project.globalStyle}\n` : '';
+  const system = [
+    'You are a concept-art director writing one prompt for a text-to-image model.',
+    kind === 'character'
+      ? "Goal: a clean CHARACTER MODEL SHEET that fixes the character's identity for continuity — full-body front view plus a head-and-shoulders close-up, neutral seamless background, even soft lighting, no text, labels, logos or watermarks."
+      : 'Goal: a clean LOCATION reference — a wide, legible establishing view of the place, no people, no text or watermarks.',
+    'Use ONLY what can be seen in a still image. From the production global style keep only pictorial cues (setting, palette, lighting, era, medium, genre tone) and IGNORE anything about narration, voice-over, sound, music, story logic, what characters know, camera movement, editing or production methodology.',
+    kind === 'character'
+      ? 'Give the character a specific, consistent physical identity: approximate age, gender presentation, body type, skin tone, hair, distinctive features and wardrobe fitting the role, setting and era. Honour any attributes already in the brief; otherwise invent plausible, specific ones — never leave the appearance vague.'
+      : 'Describe concrete depictable details: architecture, materials, textures, time of day, weather and light quality.',
+    `Write the prompt in this language (BCP-47): ${project.language || 'pt-BR'}.`,
+    'Output ONLY the prompt text — one tight, vivid paragraph. No preamble, headings, bullet points or quotes.',
+  ].join('\n');
+
+  const user = [
+    project.globalStyle ? `Production global style (extract only the visual cues): ${project.globalStyle}` : '',
+    `Subject (${kind}):`,
+    subject,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
   const { content, spend } = await chat(apiKey, model, [
-    {
-      role: 'system',
-      content:
-        'You write vivid, concrete prompts for an image generation model. Output only the prompt text, one paragraph, no preamble.',
-    },
-    {
-      role: 'user',
-      content: `${style}Write an image generation prompt for this ${kind}:\n\n${subject}`,
-    },
+    { role: 'system', content: system },
+    { role: 'user', content: user },
   ]);
   await recordSpend(dir, spend);
   return content.trim();

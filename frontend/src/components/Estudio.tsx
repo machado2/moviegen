@@ -11,12 +11,13 @@ import {
   Image as ImageIcon,
   Loader2,
   PlayCircle,
-  RotateCcw,
+  Save,
   SkipForward,
   Sparkles,
   Trash2,
   Upload,
   Video,
+  Wand2,
   X,
 } from 'lucide-react';
 import type { SpendDTO } from '@mediagen/types';
@@ -114,6 +115,10 @@ export function Estudio({
 
   const [prompt, setPrompt] = useState<string>('');
   const [promptLoading, setPromptLoading] = useState(false);
+  const [promptDirty, setPromptDirty] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
+  const [improving, setImproving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false); // upload/select/delete in flight (non-blocking visually)
   const [error, setError] = useState<string | null>(null);
@@ -246,6 +251,8 @@ export function Estudio({
     }
     let alive = true;
     setPromptLoading(true);
+    setPromptDirty(false);
+    setPromptSaved(false);
     void current
       .getPrompt()
       .then((p) => alive && setPrompt(p))
@@ -311,6 +318,42 @@ export function Estudio({
     });
   }, [prompt]);
 
+  const savePromptNow = useCallback(async () => {
+    if (!current?.savePrompt) return;
+    setSavingPrompt(true);
+    setError(null);
+    try {
+      await current.savePrompt(prompt);
+      setPromptDirty(false);
+      setPromptSaved(true);
+      setTimeout(() => setPromptSaved(false), 1500);
+      await onRefresh();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setSavingPrompt(false);
+    }
+  }, [current, prompt, onRefresh]);
+
+  const improvePromptNow = useCallback(async () => {
+    if (!current?.improvePrompt || improving) return;
+    setImproving(true);
+    setError(null);
+    try {
+      const txt = await current.improvePrompt();
+      setPrompt(txt);
+      setPromptDirty(false); // the endpoint persists it
+      setPromptSaved(true);
+      setTimeout(() => setPromptSaved(false), 1500);
+      await onRefresh();
+      await refreshSpend();
+    } catch (e) {
+      setError(`Não foi possível melhorar o prompt: ${String(e instanceof Error ? e.message : e)}`);
+    } finally {
+      setImproving(false);
+    }
+  }, [current, improving, onRefresh, refreshSpend]);
+
   // ─── API generation (per-item, no auto-advance, no auto-select) ───────────────
   const [generating, setGenerating] = useState(false);
   const [genElapsed, setGenElapsed] = useState(0);
@@ -336,9 +379,18 @@ export function Estudio({
     setError(null);
     const before = spendRef.current?.totalUsd ?? 0;
     const target = current;
+    const promptText = prompt;
     try {
       const model = (target.accepts === 'video' ? videoModelRef.current : imageModelRef.current) || undefined;
-      const res = await target.apiGenerate!({ model });
+      // Persist the edited prompt so the box stays stable after refresh (references).
+      if (target.promptEditable && target.savePrompt) {
+        try {
+          await target.savePrompt(promptText);
+        } catch {
+          /* non-fatal: still generate with the on-screen prompt */
+        }
+      }
+      const res = await target.apiGenerate!({ model, prompt: promptText });
       if (res && 'jobId' in res && target.followJob) await target.followJob(res.jobId);
       setSessionCount((c) => c + 1);
       await onRefresh();
@@ -350,7 +402,7 @@ export function Estudio({
     } finally {
       setGenerating(false);
     }
-  }, [current, generating, onRefresh, reloadCandidates, refreshSpend]);
+  }, [current, generating, onRefresh, reloadCandidates, refreshSpend, prompt]);
 
   // ─── Candidate choose/delete (optimistic → instant) ───────────────────────────
   const chooseCandidate = useCallback(
@@ -685,16 +737,71 @@ export function Estudio({
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* PROMPT */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-1">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt</h3>
-            <Button variant="outline" size="sm" onClick={copyPrompt} className="gap-1">
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copiado' : 'Copiar'}
-            </Button>
+            <div className="flex items-center gap-1">
+              {current?.improvePrompt && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void improvePromptNow()}
+                  disabled={improving || promptLoading}
+                  title="Reescreve o prompt com IA: só pistas visuais, identidade física concreta, formato de model sheet"
+                  className="gap-1"
+                >
+                  {improving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                  Melhorar com IA
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={copyPrompt} className="gap-1">
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </Button>
+            </div>
           </div>
-          <pre className="max-h-[420px] flex-1 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
-            {promptLoading ? 'Montando prompt…' : prompt}
-          </pre>
+          {current?.promptEditable ? (
+            <>
+              <textarea
+                value={promptLoading ? '' : prompt}
+                placeholder={promptLoading ? 'Montando prompt…' : undefined}
+                onChange={(e) => {
+                  setPrompt(e.target.value);
+                  setPromptDirty(true);
+                  setPromptSaved(false);
+                }}
+                disabled={promptLoading || improving}
+                spellCheck={false}
+                className="max-h-[460px] min-h-[260px] flex-1 resize-y rounded-lg border bg-background p-3 font-mono text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+              />
+              {current?.savePrompt && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void savePromptNow()}
+                    disabled={!promptDirty || savingPrompt}
+                    className="gap-1"
+                  >
+                    {savingPrompt ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : promptSaved ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    {promptSaved ? 'Salvo' : 'Salvar prompt'}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Editável — é exatamente este texto que será enviado.
+                  </span>
+                </div>
+              )}
+            </>
+          ) : (
+            <pre className="max-h-[420px] flex-1 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
+              {promptLoading ? 'Montando prompt…' : prompt}
+            </pre>
+          )}
           {current && current.getAttachments().length > 0 && (
             <div>
               <h4 className="mb-1 text-xs font-semibold text-muted-foreground">

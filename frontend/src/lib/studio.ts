@@ -60,9 +60,16 @@ export interface StudioItem {
   submit: (file: File) => Promise<void>;
   /**
    * Optional API generation. Returns a jobId to follow, or resolves directly.
-   * `opts.model` is the image model id the user picked in the Estúdio (gateway).
+   * `opts.model` is the image/video model id picked in the Estúdio (gateway);
+   * `opts.prompt` is the exact (possibly edited) prompt to send — WYSIWYG.
    */
-  apiGenerate?: (opts?: { model?: string }) => Promise<{ jobId: string } | void>;
+  apiGenerate?: (opts?: { model?: string; prompt?: string }) => Promise<{ jobId: string } | void>;
+  /** Whether the prompt can be edited in the Estúdio and is sent verbatim (references). */
+  promptEditable?: boolean;
+  /** Persist an edited prompt (references → asset.prompt). */
+  savePrompt?: (text: string) => Promise<void>;
+  /** Ask the LLM to rewrite the prompt from project context; returns (and persists) the new text. */
+  improvePrompt?: () => Promise<string>;
   /** Follow an API job to completion (resolves when done, rejects on error). */
   followJob?: (jobId: string) => Promise<void>;
   /** Currently chosen candidate (selectedTakeId / selectedRenderId / selectedVariantId). */

@@ -104,8 +104,14 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const project = await getProject(req.params.id);
       const asset = await getAsset(req.params.id, req.params.assetId);
-      const subject = asset.description || asset.characterName || asset.prompt || asset.id;
       const kind = asset.role === 'location' ? 'location' : 'character';
+      const name = asset.characterName || asset.description || asset.id;
+      const subject = [
+        `Name: ${name}`,
+        asset.description && asset.description !== name ? `Brief: ${asset.description}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
       if (asset.type === 'image') {
         const prompt = await generateImagePrompt(project, subject, kind);
         return updateAsset(req.params.id, req.params.assetId, { prompt });

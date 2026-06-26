@@ -42,6 +42,12 @@ function useQueue(build: () => Promise<StudioItem[]>, onChanged: () => void): St
   return { items, loading, reload };
 }
 
+/** Append a period only when the text doesn't already end with terminal punctuation. */
+function dot(s: string): string {
+  const t = s.trim();
+  return /[.!?…:]$/.test(t) ? t : `${t}.`;
+}
+
 const FILM_REFERENCE_ROLES = new Set([
   'character-concept',
   'character-face',
@@ -77,9 +83,9 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         isLocation
           ? `Imagem de referência de cenário para o filme "${fresh.title}".`
           : `Folha de referência de personagem para o filme "${fresh.title}".`,
-        `${isLocation ? 'Cenário' : 'Personagem'}: ${name}.`,
-        asset.description ? `Descrição: ${asset.description}.` : '',
-        fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
+        `${isLocation ? 'Cenário' : 'Personagem'}: ${dot(name)}`,
+        asset.description ? `Descrição: ${dot(asset.description)}` : '',
+        fresh.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(fresh.globalStyle)}` : '',
         isLocation
           ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
           : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
@@ -106,14 +112,22 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         setDescription: async (d) => {
           await api.assets.update(projectId, asset.id, { description: d });
         },
-        getPrompt: async () => referencePrompt,
+        getPrompt: async () => asset.prompt?.trim() || referencePrompt,
         getAttachments: () => [],
         submit: async (file) => {
           await api.assets.upload(projectId, asset.id, file);
         },
         apiGenerate: (opts) =>
-          api.assets.generateImage(projectId, asset.id, { model: opts?.model, prompt: referencePrompt }),
+          api.assets.generateImage(projectId, asset.id, {
+            model: opts?.model,
+            prompt: opts?.prompt ?? (asset.prompt?.trim() || referencePrompt),
+          }),
         followJob: (jobId) => followFilmJob(projectId, jobId),
+        promptEditable: true,
+        savePrompt: async (text) => {
+          await api.assets.update(projectId, asset.id, { prompt: text });
+        },
+        improvePrompt: async () => (await api.assets.generate(projectId, asset.id)).prompt,
         selectedCandidateId: asset.selectedVariantId ?? null,
         listCandidates: async () =>
           (await api.assets.listVariants(projectId, asset.id)).map((v) => ({
@@ -221,9 +235,9 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
       const done = Boolean(asset.file);
       const charPrompt = [
         `Folha de referência de personagem para a graphic novel "${fresh.title}".`,
-        `Personagem: ${asset.characterName ?? asset.id}.`,
-        asset.characterDescription ? `Descrição: ${asset.characterDescription}.` : '',
-        fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
+        `Personagem: ${dot(asset.characterName ?? asset.id)}`,
+        asset.characterDescription ? `Descrição: ${dot(asset.characterDescription)}` : '',
+        fresh.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(fresh.globalStyle)}` : '',
         'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
       ]
         .filter(Boolean)

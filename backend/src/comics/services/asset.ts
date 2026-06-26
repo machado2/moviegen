@@ -121,8 +121,7 @@ export async function addAssetVariant(
   if (!asset) throw notFound('Asset');
   migrateVariants(asset);
   const variantId = newId('var');
-  const ext = (input.originalName.split('.').pop() ?? 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-  const rel = `assets/${assetId}-${variantId}.${ext}`;
+  const rel = cfs.assetRelPath(assetId, variantId, input.originalName);
   await fs.writeBuffer(cfs.resolveInProject(projectId, rel), input.data);
   const variant: AssetVariant = {
     id: variantId,

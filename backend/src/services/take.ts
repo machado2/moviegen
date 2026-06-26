@@ -33,8 +33,7 @@ export async function addTake(
   if (!shot) throw notFound('Shot');
 
   const takeId = newId('take');
-  const ext = (input.originalName.split('.').pop() ?? 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
-  const filename = `${takeId}.${ext}`;
+  const filename = fs.takeFilename(takeId, input.originalName);
   const absPath = fs.takeFile(projectId, sceneId, shotId, filename);
   await fs.writeBuffer(absPath, input.data);
 

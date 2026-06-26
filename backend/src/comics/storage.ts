@@ -31,6 +31,20 @@ export function pranchaFile(projectId: string, pranchaId: string): string {
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');
 }
+
+/** Sanitize a file extension from an uploaded name, with a per-kind fallback. */
+function safeExt(originalName: string, fallback: string): string {
+  return (originalName.split('.').pop() ?? fallback).toLowerCase().replace(/[^a-z0-9]/g, '') || fallback;
+}
+/** Project-relative path of an asset file (variant or legacy single file). */
+export function assetRelPath(assetId: string, variantId: string | null, originalName: string): string {
+  const base = variantId ? `${assetId}-${variantId}` : assetId;
+  return `assets/${base}.${safeExt(originalName, 'png')}`;
+}
+/** Filename of a render under its quadro's renders/ directory. */
+export function renderFilename(renderId: string, originalName: string): string {
+  return `${renderId}.${safeExt(originalName, 'png')}`;
+}
 export function pranchaRendersDir(projectId: string, pranchaId: string): string {
   return path.join(projectDir(projectId), 'renders', pranchaId);
 }

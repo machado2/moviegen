@@ -39,8 +39,7 @@ export async function addRender(
   if (!quadro) throw notFound('Quadro');
 
   const renderId = newId('render');
-  const ext = (input.originalName.split('.').pop() ?? 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-  const filename = `${renderId}.${ext}`;
+  const filename = cfs.renderFilename(renderId, input.originalName);
   const absPath = cfs.renderFile(projectId, pranchaId, quadroId, filename);
   await fs.writeBuffer(absPath, input.data);
 

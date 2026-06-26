@@ -42,6 +42,25 @@ export function sceneFile(projectId: string, sceneId: string): string {
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');
 }
+
+/** Sanitize a file extension from an uploaded name, with a per-kind fallback. */
+function safeExt(originalName: string, fallback: string): string {
+  return (originalName.split('.').pop() ?? fallback).toLowerCase().replace(/[^a-z0-9]/g, '') || fallback;
+}
+/**
+ * Project-relative path of an asset file. With a variantId it names one
+ * candidate (assets/<asset>-<variant>.<ext>); without one, the legacy single
+ * file (assets/<asset>.<ext>). The on-disk naming scheme lives here, not in the
+ * asset service.
+ */
+export function assetRelPath(assetId: string, variantId: string | null, originalName: string): string {
+  const base = variantId ? `${assetId}-${variantId}` : assetId;
+  return `assets/${base}.${safeExt(originalName, 'bin')}`;
+}
+/** Filename of a take's video under its shot's takes/ directory. */
+export function takeFilename(takeId: string, originalName: string): string {
+  return `${takeId}.${safeExt(originalName, 'mp4')}`;
+}
 export function sceneTakesDir(projectId: string, sceneId: string): string {
   return path.join(projectDir(projectId), 'takes', sceneId);
 }

@@ -9,7 +9,7 @@ import { DATA_DIR, PROJECTS_DIR } from '../config.js';
 // On-disk project data is Nickel, not JSON. These are the codec entry points.
 export { readNickel, readNickelString, writeNickel, toNickel } from './nickel.js';
 
-import * as git from './git.js';
+import * as repo from './repo.js';
 export type { HistoryEntry } from './git.js';
 
 export function projectDir(projectId: string): string {
@@ -82,12 +82,7 @@ export function movieOutputFile(projectId: string): string {
 
 /** Resolve a path stored relative to the project root into an absolute path. */
 export function resolveInProject(projectId: string, relative: string): string {
-  const root = projectDir(projectId);
-  const abs = path.resolve(root, relative);
-  if (!abs.startsWith(root + path.sep) && abs !== root) {
-    throw new Error(`Path escapes project root: ${relative}`);
-  }
-  return abs;
+  return repo.resolveInRoot(projectDir(projectId), relative);
 }
 
 export async function ensureDir(dir: string): Promise<void> {
@@ -131,9 +126,7 @@ export async function remove(target: string): Promise<void> {
 }
 
 export async function listProjectIds(): Promise<string[]> {
-  await ensureDir(PROJECTS_DIR);
-  const entries = await fs.readdir(PROJECTS_DIR, { withFileTypes: true });
-  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  return repo.listDirs(PROJECTS_DIR);
 }
 
 /** Stream helpers re-exported so routes don't import node:fs directly. */
@@ -144,19 +137,15 @@ export { createReadStream, createWriteStream };
 
 /** Record the current state of a film project as a commit. */
 export async function commitProject(projectId: string, message: string): Promise<void> {
-  try {
-    await git.commit(projectDir(projectId), message);
-  } catch {
-    /* best-effort: versioning must never block a save */
-  }
+  return repo.commitDir(projectDir(projectId), message);
 }
 /** Commit log for a film project, newest first. */
 export function projectHistory(projectId: string) {
-  return git.history(projectDir(projectId));
+  return repo.historyDir(projectDir(projectId));
 }
 /** Restore a film project to an earlier commit (recorded as a new commit). */
 export function restoreProject(projectId: string, hash: string) {
-  return git.restore(projectDir(projectId), hash);
+  return repo.restoreDir(projectDir(projectId), hash);
 }
 
 export async function init(): Promise<void> {

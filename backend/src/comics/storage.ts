@@ -2,11 +2,10 @@
 // from the film storage module; only the path layout differs (and it lives
 // under data/comics/projects to avoid colliding with film projects).
 
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { COMICS_PROJECTS_DIR } from '../config.js';
 import { ensureDir } from '../storage/filesystem.js';
-import * as git from '../storage/git.js';
+import * as repo from '../storage/repo.js';
 
 export function projectDir(projectId: string): string {
   return path.join(COMICS_PROJECTS_DIR, projectId);
@@ -70,18 +69,11 @@ export function bookOutputFile(projectId: string, format: 'cbz' | 'pdf' | 'epub'
 }
 
 export function resolveInProject(projectId: string, relative: string): string {
-  const root = projectDir(projectId);
-  const abs = path.resolve(root, relative);
-  if (!abs.startsWith(root + path.sep) && abs !== root) {
-    throw new Error(`Path escapes project root: ${relative}`);
-  }
-  return abs;
+  return repo.resolveInRoot(projectDir(projectId), relative);
 }
 
 export async function listProjectIds(): Promise<string[]> {
-  await ensureDir(COMICS_PROJECTS_DIR);
-  const entries = await fs.readdir(COMICS_PROJECTS_DIR, { withFileTypes: true });
-  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  return repo.listDirs(COMICS_PROJECTS_DIR);
 }
 
 export async function init(): Promise<void> {
@@ -89,21 +81,16 @@ export async function init(): Promise<void> {
 }
 
 // ─── Version history (per-project git repo) ─────────────────────────────────
-// Best-effort: never throws, so a save is never blocked by versioning.
 
 /** Record the current state of a comics project as a commit. */
 export async function commitProject(projectId: string, message: string): Promise<void> {
-  try {
-    await git.commit(projectDir(projectId), message);
-  } catch {
-    /* best-effort: versioning must never block a save */
-  }
+  return repo.commitDir(projectDir(projectId), message);
 }
 /** Commit log for a comics project, newest first. */
 export function projectHistory(projectId: string) {
-  return git.history(projectDir(projectId));
+  return repo.historyDir(projectDir(projectId));
 }
 /** Restore a comics project to an earlier commit (recorded as a new commit). */
 export function restoreProject(projectId: string, hash: string) {
-  return git.restore(projectDir(projectId), hash);
+  return repo.restoreDir(projectDir(projectId), hash);
 }

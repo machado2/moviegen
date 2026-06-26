@@ -223,6 +223,12 @@ export function Estudio({
     setSelectedId(current?.selectedCandidateId ?? null);
   }, [current?.selectedCandidateId]);
 
+  // Keep the active chip centered in the sticky nav rail as you move between items.
+  const activeChipRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeChipRef.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [currentKey]);
+
   const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
   // Instant preview on item switch: the queue already knows the selected result's
   // thumbnail (images), so show it before the candidate list round-trip lands.
@@ -566,6 +572,81 @@ export function Estudio({
         </div>
       </div>
 
+      {/* ─── Sticky navigation: stays above the fold while you scroll candidates ── */}
+      {!embedded && current && (
+        <div className="sticky top-0 z-20 -mx-1 space-y-2 border-b bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="flex flex-wrap items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={goPrev} className="gap-1">
+              <ChevronLeft className="h-4 w-4" /> Anterior
+            </Button>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">
+              {Math.max(0, items.findIndex((i) => i.key === current.key)) + 1} / {items.length}
+            </span>
+            <Button variant="ghost" size="sm" onClick={goNext} className="gap-1">
+              Próximo <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="mx-1 h-4 w-px bg-border" />
+            {current.skipped ? (
+              <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
+                <PlayCircle className="h-4 w-4" /> Retomar
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
+                <SkipForward className="h-4 w-4" /> Pular
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Mover antes na fila"
+              disabled={!canMoveUp}
+              onClick={() => void move(-1)}
+              className="h-8 w-8"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Mover depois na fila"
+              disabled={!canMoveDown}
+              onClick={() => void move(1)}
+              className="h-8 w-8"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </div>
+          {/* Item rail: single horizontal scroll row so it never grows vertically. */}
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {items.map((it) => {
+              const isCurrent = it.key === current.key;
+              return (
+                <button
+                  key={it.key}
+                  ref={isCurrent ? activeChipRef : undefined}
+                  type="button"
+                  title={`${it.label}${it.sublabel ? ` · ${it.sublabel}` : ''}`}
+                  onClick={() => setFocusKey(it.key)}
+                  className={cn(
+                    'h-7 shrink-0 rounded px-2 text-xs transition-colors',
+                    isCurrent
+                      ? 'bg-primary text-primary-foreground'
+                      : it.done
+                        ? 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400'
+                        : it.skipped
+                          ? 'bg-muted/50 text-muted-foreground/60 line-through'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/70',
+                  )}
+                >
+                  {it.done ? '●' : it.skipped ? '⤓' : '○'}{' '}
+                  {it.label.length > 18 ? it.label.slice(0, 17) + '…' : it.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Scope selector */}
       {!embedded && groups.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -742,49 +823,6 @@ export function Estudio({
               </div>
             )}
           </div>
-
-          {/* manual nav */}
-          {!embedded && current && (
-            <div className="flex flex-wrap items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={goPrev} className="gap-1">
-                <ChevronLeft className="h-4 w-4" /> Anterior
-              </Button>
-              <Button variant="ghost" size="sm" onClick={goNext} className="gap-1">
-                Próximo <ChevronRight className="h-4 w-4" />
-              </Button>
-              <span className="mx-1 h-4 w-px bg-border" />
-              {current.skipped ? (
-                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
-                  <PlayCircle className="h-4 w-4" /> Retomar
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
-                  <SkipForward className="h-4 w-4" /> Pular
-                </Button>
-              )}
-              <span className="mx-1 h-4 w-px bg-border" />
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Mover antes na fila"
-                disabled={!canMoveUp}
-                onClick={() => void move(-1)}
-                className="h-8 w-8"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                title="Mover depois na fila"
-                disabled={!canMoveDown}
-                onClick={() => void move(1)}
-                className="h-8 w-8"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
         </div>
       </div>
 
@@ -808,14 +846,14 @@ export function Estudio({
               Nenhum candidato ainda. Clique em <span className="font-medium">Gerar</span> ou envie um arquivo.
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <div className="flex gap-3 overflow-x-auto pb-1">
               {candidates.map((c) => {
                 const chosen = c.id === selectedId;
                 return (
                   <div
                     key={c.id}
                     className={cn(
-                      'group relative overflow-hidden rounded-lg border bg-card transition-shadow',
+                      'group relative w-40 shrink-0 overflow-hidden rounded-lg border bg-card transition-shadow',
                       chosen ? 'ring-2 ring-primary' : 'hover:shadow-md',
                     )}
                   >
@@ -879,36 +917,6 @@ export function Estudio({
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ─── Queue rail ─────────────────────────────────────────────────────── */}
-      {!embedded && (
-        <div className="space-y-1">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fila</h4>
-          <div className="flex flex-wrap gap-1">
-            {items.map((it) => (
-              <button
-                key={it.key}
-                type="button"
-                title={`${it.label}${it.sublabel ? ` · ${it.sublabel}` : ''}`}
-                onClick={() => setFocusKey(it.key)}
-                className={cn(
-                  'h-7 rounded px-2 text-xs transition-colors',
-                  it.key === current?.key
-                    ? 'bg-primary text-primary-foreground'
-                    : it.done
-                      ? 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400'
-                      : it.skipped
-                        ? 'bg-muted/50 text-muted-foreground/60 line-through'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/70',
-                )}
-              >
-                {it.done ? '●' : it.skipped ? '⤓' : '○'}{' '}
-                {it.label.length > 16 ? it.label.slice(0, 15) + '…' : it.label}
-              </button>
-            ))}
-          </div>
         </div>
       )}
 

@@ -3,7 +3,7 @@ id: TASK-15
 title: >-
   Estúdio: gerar vários candidatos por item e escolher (sem
   auto-avanço/auto-seleção)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-26 11:52'
 updated_date: '2026-06-26 12:15'

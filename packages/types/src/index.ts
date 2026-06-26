@@ -183,6 +183,61 @@ export interface ParsedShot {
   characterIds: string[];    // which characters appear in this shot
 }
 
+// ─── Co-creation: outline / beat sheet ──────────────────────────────────────
+//
+// The outline is the bridge between a loose idea and the scene structure. The
+// co-creation chat fills it (logline, themes, acts → beats); each beat can later
+// be "exploded" into scenes, which link back via sceneNumbers. It is an artifact
+// in its own right (outline.ncl), independent of whether scenes exist yet.
+
+export interface OutlineBeat {
+  id: string;
+  title: string;            // short label, e.g. "Catalyst", "Midpoint"
+  summary: string;          // what happens in this beat
+  sceneNumbers: number[];   // scenes this beat was expanded into (Scene.number); may be empty
+}
+
+export interface OutlineAct {
+  number: number;           // 1-based act number
+  title: string;            // e.g. "Setup", "Confrontation", "Resolution"
+  beats: OutlineBeat[];
+}
+
+export interface Outline {
+  logline: string;
+  themes: string[];
+  acts: OutlineAct[];
+  updatedAt: string;        // ISO 8601
+}
+
+// ─── Co-creation: chat thread ────────────────────────────────────────────────
+//
+// A persisted transcript of the co-creation conversation, per project. Kept in
+// our own simple shape (not the AI SDK's UIMessage format) so it is stable on
+// disk; the backend converts to/from model messages, and the frontend renders
+// it. toolEvents surface what the agent did inline, for the live structure panel.
+
+export type ChatRole = 'user' | 'assistant';
+
+export interface ChatToolEvent {
+  tool: string;             // e.g. "add_beat", "add_scene"
+  summary: string;          // human label, e.g. "Beat: Catalyst"
+  ok: boolean;              // whether the mutation succeeded
+}
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  toolEvents?: ChatToolEvent[];
+  createdAt: string;        // ISO 8601
+}
+
+export interface ChatThread {
+  messages: ChatMessage[];
+  updatedAt: string;        // ISO 8601
+}
+
 // ─── Jobs (assembly progress) ───────────────────────────────────────────────
 
 export type JobStatus = 'queued' | 'running' | 'done' | 'error';

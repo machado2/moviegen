@@ -26,6 +26,13 @@ export function scriptFile(projectId: string): string {
 export function parsedScriptFile(projectId: string): string {
   return path.join(projectDir(projectId), 'parsed-script.ncl');
 }
+// Co-creation artifacts: the outline/beat sheet and the chat transcript.
+export function outlineFile(projectId: string): string {
+  return path.join(projectDir(projectId), 'outline.ncl');
+}
+export function chatThreadFile(projectId: string): string {
+  return path.join(projectDir(projectId), 'cocreate-chat.ncl');
+}
 export function scenesDir(projectId: string): string {
   return path.join(projectDir(projectId), 'scenes');
 }

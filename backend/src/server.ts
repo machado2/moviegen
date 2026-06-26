@@ -23,6 +23,7 @@ import { sceneRoutes } from './routes/scenes.js';
 import { shotRoutes } from './routes/shots.js';
 import { takeRoutes } from './routes/takes.js';
 import { assemblyRoutes } from './routes/assembly.js';
+import { cocreateRoutes } from './routes/cocreate.js';
 import { comicsRoutes } from './comics/routes/index.js';
 import * as comicsStorage from './comics/storage.js';
 
@@ -70,6 +71,7 @@ async function buildServer() {
       await api.register(shotRoutes);
       await api.register(takeRoutes);
       await api.register(assemblyRoutes);
+      await api.register(cocreateRoutes);
       api.get('/health', async () => ({ ok: true }));
     },
     { prefix: '/api/v1' },

@@ -62,8 +62,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
         jobId,
         (p) => {
           setParseJob(p);
-          // Accumulate each distinct agent step into a live log.
-          if (p.message) {
+          // Accumulate each distinct agent step into a live log. Heartbeats
+          // (prefixed "⏳") stay on the live status line only, not the log.
+          if (p.message && !p.message.startsWith('⏳')) {
             setParseLog((prev) => (prev[prev.length - 1] === p.message ? prev : [...prev, p.message]));
           }
           if (p.status === 'done') {

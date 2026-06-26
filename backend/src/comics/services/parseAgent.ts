@@ -159,7 +159,8 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
         };
         prancha.quadros.push(quadro);
         b.quadroCount += 1;
-        onStep(`Prancha ${args.pranchaNumber} · Quadro ${quadro.order}`);
+        const snippet = (quadro.composition || quadro.setting || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+        onStep(`Prancha ${args.pranchaNumber} · Quadro ${quadro.order}${snippet ? ` — ${snippet}` : ''}`);
         return `ok: prancha ${args.pranchaNumber} quadro ${quadro.order}`;
       },
     }),
@@ -200,6 +201,17 @@ export async function parseComicsScriptAgentic(
     [signal, gateway.capSignal, timeout].filter((s): s is AbortSignal => Boolean(s)),
   );
 
+  // Liveness heartbeat — see services/parseAgent.ts. Ticks elapsed time + counts
+  // every ~2s so a long first model call doesn't look frozen. "⏳" keeps it on
+  // the live status line, out of the step log.
+  const startedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    const s = Math.round((Date.now() - startedAt) / 1000);
+    const counts = `${b.result.pranchas.length} pranchas · ${b.quadroCount} quadros`;
+    const tail = b.result.pranchas.length === 0 ? ' · o modelo está lendo o roteiro…' : '';
+    onStep?.(estimate(), `⏳ Trabalhando há ${s}s · ${counts}${tail}`);
+  }, 2000);
+
   let usage: { inputTokens?: number; outputTokens?: number } | undefined;
   try {
     emit('Lendo o roteiro e montando as pranchas…');
@@ -225,6 +237,7 @@ export async function parseComicsScriptAgentic(
     }
     throw new HttpError(502, `Parse via gateway falhou: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
+    clearInterval(heartbeat);
     const runSpend = gateway.runSpend();
     if (runSpend > 0 || usage) {
       await recordSpend(dir, {

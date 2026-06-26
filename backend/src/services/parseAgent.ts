@@ -166,7 +166,8 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
         };
         scene.shots.push(shot);
         b.shotCount += 1;
-        onStep(`Cena ${args.sceneNumber} · Shot ${shot.order}`);
+        const snippet = (shot.camera || shot.action || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+        onStep(`Cena ${args.sceneNumber} · Shot ${shot.order}${snippet ? ` — ${snippet}` : ''}`);
         return `ok: cena ${args.sceneNumber} shot ${shot.order}`;
       },
     }),
@@ -210,6 +211,18 @@ export async function parseScriptAgentic(
     [signal, gateway.capSignal, timeout].filter((s): s is AbortSignal => Boolean(s)),
   );
 
+  // Liveness heartbeat: the first model call can take minutes before any tool
+  // fires, during which there'd be no feedback. Tick elapsed time + current
+  // counts every ~2s so the user can see it's working, not frozen. The "⏳"
+  // prefix tells the UI to keep it on the live status line, out of the step log.
+  const startedAt = Date.now();
+  const heartbeat = setInterval(() => {
+    const s = Math.round((Date.now() - startedAt) / 1000);
+    const counts = `${b.result.scenes.length} cenas · ${b.shotCount} shots`;
+    const tail = b.result.scenes.length === 0 ? ' · o modelo está lendo o roteiro…' : '';
+    onStep?.(estimate(), `⏳ Trabalhando há ${s}s · ${counts}${tail}`);
+  }, 2000);
+
   let usage: { inputTokens?: number; outputTokens?: number } | undefined;
   try {
     emit('Lendo o roteiro e montando a estrutura…');
@@ -237,6 +250,7 @@ export async function parseScriptAgentic(
     }
     throw new HttpError(502, `Parse via gateway falhou: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
+    clearInterval(heartbeat);
     // Record whatever we actually spent, even on abort/timeout.
     const runSpend = gateway.runSpend();
     if (runSpend > 0 || usage) {

@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@claude'
 created_date: '2026-06-26 01:34'
-updated_date: '2026-06-26 01:42'
+updated_date: '2026-06-26 01:52'
 labels: []
 dependencies: []
 priority: high
@@ -31,6 +31,8 @@ O parse de roteiro da HQ (comics/services/ai.ts parseComicsScript) ainda é uma 
 
 <!-- SECTION:NOTES:BEGIN -->
 Criado comics/services/parseAgent.ts (parseComicsScriptAgentic) espelhando o do filme: generateText + tools set_metadata/add_character/add_prancha/add_quadro/finish, stopWhen=[hasToolCall('finish'),stepCountIs(160)], gateway compartilhado (custo via header + teto mid-loop), AbortSignal. Layouts e slotFormats e tipos de texto como z.enum, coerentes com validate.ts. Repontado comics/services/script.ts startScriptParse para o agente com handle.update como onStep. Removidos os órfãos do comics/services/ai.ts (parseComicsScript one-shot, chat SSE, extractJson, PARSE_SYSTEM_PROMPT) — restou só generateFrame (codex). Overview da HQ ganhou o log de passos ao vivo (parseLog) igual ao filme; texto do diálogo de confirmação atualizado (agente em passos, não chamada única) nas DUAS Overviews. Smoke-test real (gemini-2.5-flash): 'O Último Bonde', 2 personagens, 2 pranchas, 4 quadros, 12 passos, texto verbatim preservado, validação OK, custo US$0.00164, 6.8s. backend+frontend typecheck/build OK.
+
+Refino pós-entrega: slotFormat do quadro deixou de ser pedido ao modelo e passou a ser DERIVADO de slotFormatFor(layout, posição) no builder — garante coerência layout↔slotFormat na hora (era o que o apply já re-derivava). Removida a constante SLOT_FORMATS órfã e o campo do schema da tool add_quadro; system prompt ajustado (modelo só escolhe o layout). Re-smoke: P1/P2 rows-2 agora com 'horizontal alto, proporção 4:3' coerente; filme sem regressão. (502s observados durante o teste eram instabilidade transitória do gateway, confirmado com chamada trivial OK.)
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

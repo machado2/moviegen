@@ -18,6 +18,8 @@ import type {
   AllProjectSummary,
   SpendDTO,
   ModelCatalogEntry,
+  Outline,
+  ChatThread,
 } from '@mediagen/types';
 
 /** Patch shape for global settings updates (shared by film + comics UIs). */
@@ -449,6 +451,22 @@ export const modelsApi = {
   },
 };
 
+export const cocreateApi = {
+  outline(id: string): Promise<Outline> {
+    return request(`/projects/${id}/outline`);
+  },
+  chatThread(id: string): Promise<ChatThread> {
+    return request(`/projects/${id}/cocreate/chat`);
+  },
+  clearChat(id: string): Promise<ChatThread> {
+    return request(`/projects/${id}/cocreate/chat`, { method: 'DELETE' });
+  },
+  // Endpoint the AI SDK useChat transport posts to (streams the UI-message protocol).
+  chatUrl(id: string): string {
+    return `${BASE}/projects/${id}/cocreate/chat`;
+  },
+};
+
 export const api = {
   projects: projectsApi,
   allProjects: allProjectsApi,
@@ -461,6 +479,7 @@ export const api = {
   assembly: assemblyApi,
   settings: settingsApi,
   models: modelsApi,
+  cocreate: cocreateApi,
 };
 
 export default api;

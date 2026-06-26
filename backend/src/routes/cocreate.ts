@@ -20,13 +20,18 @@ export async function cocreateRoutes(app: FastifyInstance): Promise<void> {
       if (!Array.isArray(messages) || messages.length === 0) {
         throw badRequest('Provide { messages: UIMessage[] } with at least one message');
       }
-      // Abort the model run if the client disconnects mid-stream.
+      // Abort the model run if the client disconnects before the stream finishes
+      // (e.g. the "Parar" button aborts the fetch). Listen on the *response*
+      // socket — req.raw 'close' fires as soon as Fastify finishes reading the
+      // body, which would abort every turn immediately.
       const ac = new AbortController();
-      req.raw.on('close', () => ac.abort());
-
-      const turn = await runCoCreateTurn({ projectId: req.params.id, uiMessages: messages, signal: ac.signal });
       // Hand the raw Node response to the SDK; Fastify must not also send one.
       reply.hijack();
+      reply.raw.on('close', () => {
+        if (!reply.raw.writableFinished) ac.abort();
+      });
+
+      const turn = await runCoCreateTurn({ projectId: req.params.id, uiMessages: messages, signal: ac.signal });
       turn.pipe(reply.raw);
       return reply;
     },

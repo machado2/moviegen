@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   LayoutGrid,
+  MessagesSquare,
   Settings2,
   Users,
   Wand2,
@@ -15,6 +16,7 @@ import { useFilmStudioItems } from '@/hooks/useStudioQueue';
 import { useSpend } from '@/hooks/useSpend';
 import { useSettings } from '@/hooks/useSettings';
 import { Overview } from '@/pages/Overview';
+import { CoCreate } from '@/components/CoCreate';
 import { Assets } from '@/pages/Assets';
 import { Scenes } from '@/pages/Scenes';
 import { Assembly } from '@/pages/Assembly';
@@ -31,6 +33,7 @@ import { api } from '@/api/client';
 type Tab =
   | 'pipeline'
   | 'overview'
+  | 'cocreate'
   | 'studio'
   | 'storyboard'
   | 'characters'
@@ -43,6 +46,7 @@ const ic = 'h-4 w-4';
 const NAV: NavItem[] = [
   { id: 'pipeline', label: 'Pipeline', icon: <LayoutDashboard className={ic} /> },
   { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
+  { id: 'cocreate', label: 'Co-criar', icon: <MessagesSquare className={ic} /> },
   { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
   { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
   { id: 'characters', label: 'Elenco', icon: <Users className={ic} /> },
@@ -104,6 +108,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
           />
         )}
         {tab === 'overview' && <Overview project={project} onChanged={onChanged} />}
+        {tab === 'cocreate' && <CoCreate project={project} onChanged={onChanged} />}
         {tab === 'studio' &&
           (queueLoading ? (
             <p className="text-sm text-muted-foreground">Carregando fila de produção…</p>

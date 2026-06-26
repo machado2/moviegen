@@ -3,9 +3,11 @@ id: TASK-13
 title: >-
   Export em 2 variantes (estrutura / com mídia) + Importar na UI (aceita projeto
   incompleto)
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-06-26 02:11'
+updated_date: '2026-06-26 02:15'
 labels: []
 dependencies: []
 priority: high

@@ -110,14 +110,15 @@ export const projectsApi = {
   remove(id: string): Promise<void> {
     return request(`/projects/${id}`, { method: 'DELETE' });
   },
-  exportUrl(id: string): string {
-    return `${BASE}/projects/${id}/export`;
+  exportUrl(id: string, opts?: { media?: 'full' | 'structure' }): string {
+    const q = opts?.media === 'structure' ? '?media=structure' : '';
+    return `${BASE}/projects/${id}/export${q}`;
   },
-  async export(id: string): Promise<void> {
+  async export(id: string, opts?: { media?: 'full' | 'structure' }): Promise<void> {
     // Trigger a browser download of the project zip.
     const a = document.createElement('a');
-    a.href = projectsApi.exportUrl(id);
-    a.download = `${id}.zip`;
+    a.href = projectsApi.exportUrl(id, opts);
+    a.download = `${id}${opts?.media === 'structure' ? '-estrutura' : ''}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -210,8 +210,19 @@ export function Overview({ project, onChanged }: OverviewProps) {
               <Sparkles className="h-4 w-4" />
               {parsing ? 'Parseando…' : 'Parsear com IA'}
             </Button>
-            <Button variant="outline" onClick={() => void api.projects.export(project.id)}>
-              <Download className="h-4 w-4" /> Exportar projeto
+            <Button
+              variant="outline"
+              onClick={() => void api.projects.export(project.id, { media: 'structure' })}
+              title="Só os arquivos .ncl + roteiro (sem mídia) — leve, ideal para editar/transportar"
+            >
+              <Download className="h-4 w-4" /> Exportar estrutura (.ncl)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => void api.projects.export(project.id, { media: 'full' })}
+              title="Projeto completo, incluindo toda a mídia gerada"
+            >
+              <Download className="h-4 w-4" /> Exportar com mídia
             </Button>
           </div>
 

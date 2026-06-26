@@ -106,13 +106,14 @@ export const comicsProjectsApi = {
   remove(id: string): Promise<void> {
     return request(`/projects/${id}`, { method: 'DELETE' });
   },
-  exportUrl(id: string): string {
-    return `${BASE}/projects/${id}/export`;
+  exportUrl(id: string, opts?: { media?: 'full' | 'structure' }): string {
+    const q = opts?.media === 'structure' ? '?media=structure' : '';
+    return `${BASE}/projects/${id}/export${q}`;
   },
-  export(id: string): void {
+  export(id: string, opts?: { media?: 'full' | 'structure' }): void {
     const a = document.createElement('a');
-    a.href = comicsProjectsApi.exportUrl(id);
-    a.download = `${id}.zip`;
+    a.href = comicsProjectsApi.exportUrl(id, opts);
+    a.download = `${id}${opts?.media === 'structure' ? '-estrutura' : ''}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -38,12 +38,18 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.get<{ Params: { id: string } }>('/projects/:id/export', async (req, reply) => {
-    const stream = await exportProjectZip(req.params.id);
-    reply.header('Content-Type', 'application/zip');
-    reply.header('Content-Disposition', `attachment; filename="${req.params.id}.zip"`);
-    return reply.send(stream);
-  });
+  app.get<{ Params: { id: string }; Querystring: { media?: string } }>(
+    '/projects/:id/export',
+    async (req, reply) => {
+      // ?media=structure ships only the Nickel/source files; default is full.
+      const structureOnly = req.query.media === 'structure';
+      const stream = await exportProjectZip(req.params.id, { includeMedia: !structureOnly });
+      const suffix = structureOnly ? '-estrutura' : '';
+      reply.header('Content-Type', 'application/zip');
+      reply.header('Content-Disposition', `attachment; filename="${req.params.id}${suffix}.zip"`);
+      return reply.send(stream);
+    },
+  );
 
   app.post('/projects/import', async (req, reply) => {
     const { buffer } = await readUpload(req);

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readdir } from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import archiver from 'archiver';
 import AdmZip from 'adm-zip';
@@ -8,8 +9,24 @@ import { getProject, createProject, saveProject } from './project.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { validateProject, validateScene } from '../lib/validate.js';
 
-/** Build a ZIP stream of the whole project, with the API key redacted. */
-export async function exportProjectZip(projectId: string): Promise<Readable> {
+// The media directories — large, generated outputs. Excluded by the
+// structure-only export so a project can be moved between machines cheaply.
+const MEDIA_DIRS = ['assets', 'takes', 'output'];
+
+/**
+ * Build a ZIP stream of a project, with the API key redacted.
+ *
+ * - `includeMedia: false` (structure) ships only the Nickel/source files
+ *   (project.ncl, script.md, scenes/, and any loose root .ncl like outline.ncl,
+ *   cocreate-chat.ncl, parsed-script.ncl). Small, ideal for editing via Claude
+ *   Code and moving local↔VPS.
+ * - `includeMedia: true` (default) also ships the generated media.
+ */
+export async function exportProjectZip(
+  projectId: string,
+  opts: { includeMedia?: boolean } = {},
+): Promise<Readable> {
+  const includeMedia = opts.includeMedia ?? true;
   const project = await getProject(projectId);
   const root = fs.projectDir(projectId);
 
@@ -24,14 +41,28 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   if (await fs.pathExists(fs.scriptFile(projectId))) {
     archive.file(fs.scriptFile(projectId), { name: 'script.md' });
   }
-  // scenes/, assets/, takes/, output/ — copy directories as-is if present.
-  for (const dir of ['scenes', 'assets', 'takes', 'output']) {
+  // Loose root .ncl structure files (outline.ncl, cocreate-chat.ncl,
+  // parsed-script.ncl, …) — anything but project.ncl, which is written redacted.
+  for (const name of await rootNickelFiles(root)) {
+    archive.file(path.join(root, name), { name });
+  }
+  // scenes/ is structure; the media dirs are added only for a full export.
+  const dirs = includeMedia ? ['scenes', ...MEDIA_DIRS] : ['scenes'];
+  for (const dir of dirs) {
     const abs = path.join(root, dir);
     if (await fs.pathExists(abs)) archive.directory(abs, dir);
   }
 
   void archive.finalize();
   return out;
+}
+
+/** Loose `*.ncl` files in the project root, excluding the redacted project.ncl. */
+async function rootNickelFiles(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith('.ncl') && e.name !== 'project.ncl')
+    .map((e) => e.name);
 }
 
 /** Import a project from a ZIP buffer. Validates against the current types. */

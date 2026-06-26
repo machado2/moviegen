@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readdir } from 'node:fs/promises';
 import { PassThrough, Readable } from 'node:stream';
 import archiver from 'archiver';
 import AdmZip from 'adm-zip';
@@ -9,7 +10,19 @@ import { getProject, createProject, saveProject } from './project.js';
 import { badRequest } from '../../lib/errors.js';
 import { validateComicsProject, validatePrancha } from '../validate.js';
 
-export async function exportProjectZip(projectId: string): Promise<Readable> {
+// Generated media directories — excluded by the structure-only export.
+const MEDIA_DIRS = ['assets', 'renders', 'output'];
+
+/**
+ * Build a ZIP stream of a comics project, API key redacted. `includeMedia: false`
+ * (structure) ships only project.ncl + script.md + pranchas/ + loose root .ncl;
+ * the default (true) also ships the generated media.
+ */
+export async function exportProjectZip(
+  projectId: string,
+  opts: { includeMedia?: boolean } = {},
+): Promise<Readable> {
+  const includeMedia = opts.includeMedia ?? true;
   const project = await getProject(projectId);
   const root = cfs.projectDir(projectId);
   const archive = archiver('zip', { zlib: { level: 9 } });
@@ -22,7 +35,15 @@ export async function exportProjectZip(projectId: string): Promise<Readable> {
   if (await fs.pathExists(cfs.scriptFile(projectId))) {
     archive.file(cfs.scriptFile(projectId), { name: 'script.md' });
   }
-  for (const dir of ['pranchas', 'assets', 'renders', 'output']) {
+  // Loose root .ncl structure files (parsed-script.ncl, …), excluding project.ncl.
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  for (const e of entries) {
+    if (e.isFile() && e.name.endsWith('.ncl') && e.name !== 'project.ncl') {
+      archive.file(path.join(root, e.name), { name: e.name });
+    }
+  }
+  const dirs = includeMedia ? ['pranchas', ...MEDIA_DIRS] : ['pranchas'];
+  for (const dir of dirs) {
     const abs = path.join(root, dir);
     if (await fs.pathExists(abs)) archive.directory(abs, dir);
   }

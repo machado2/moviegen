@@ -57,6 +57,24 @@ export interface Asset {
   description?: string;    // human-readable notes
   skipped?: boolean;       // production queue: user skipped this unit (persisted)
   queuePriority?: number;  // production queue: manual ordering (lower = earlier); queue-only, not narrative order
+
+  // Generated/uploaded candidates. `file` always mirrors the selected variant's
+  // file (back-compat with everything that reads `asset.file`); generation adds a
+  // variant without selecting it, so the user picks the keeper explicitly.
+  variants?: AssetVariant[];
+  selectedVariantId?: string | null;
+}
+
+// One produced candidate for an image asset (a character sheet, a location, …).
+// Mirrors the Take/Render model so references behave like shots/quadros: keep
+// every generation, choose one as the result.
+export interface AssetVariant {
+  id: string;
+  file: string;            // path relative to project root
+  createdAt: string;       // ISO 8601
+  source: 'upload' | 'generated';
+  generationPrompt?: string;
+  generationModel?: string;
 }
 
 // ─── Scenes ───────────────────────────────────────────────────────────────────

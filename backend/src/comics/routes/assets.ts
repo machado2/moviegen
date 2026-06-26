@@ -3,9 +3,13 @@ import { extname } from 'node:path';
 import {
   createAsset,
   deleteAsset,
+  deleteAssetVariant,
   getAsset,
   getAssetFileAbsolutePath,
+  getAssetVariantAbsolutePath,
   listAssets,
+  listAssetVariants,
+  selectAssetVariant,
   updateAsset,
   uploadAssetFile,
   type CreateAssetInput,
@@ -53,6 +57,31 @@ export async function comicsAssetRoutes(app: FastifyInstance): Promise<void> {
     reply.header('Content-Type', MIME[extname(path).toLowerCase()] ?? 'application/octet-stream');
     return reply.send(fs.createReadStream(path));
   });
+
+  // ─── Variants (generated/uploaded candidates; the user picks the keeper) ──────
+  app.get<{ Params: { id: string; assetId: string } }>(
+    '/projects/:id/assets/:assetId/variants',
+    async (req) => listAssetVariants(req.params.id, req.params.assetId),
+  );
+
+  app.put<{ Params: { id: string; assetId: string }; Body: { variantId: string | null } }>(
+    '/projects/:id/assets/:assetId/selected-variant',
+    async (req) => selectAssetVariant(req.params.id, req.params.assetId, req.body?.variantId ?? null),
+  );
+
+  app.delete<{ Params: { id: string; assetId: string; variantId: string } }>(
+    '/projects/:id/assets/:assetId/variants/:variantId',
+    async (req) => deleteAssetVariant(req.params.id, req.params.assetId, req.params.variantId),
+  );
+
+  app.get<{ Params: { id: string; assetId: string; variantId: string } }>(
+    '/projects/:id/assets/:assetId/variants/:variantId',
+    async (req, reply) => {
+      const { path } = await getAssetVariantAbsolutePath(req.params.id, req.params.assetId, req.params.variantId);
+      reply.header('Content-Type', MIME[extname(path).toLowerCase()] ?? 'application/octet-stream');
+      return reply.send(fs.createReadStream(path));
+    },
+  );
 
   // Generate a character reference image via the gateway. Returns a job id.
   app.post<{ Params: { id: string; assetId: string }; Body: { model?: string; prompt?: string } }>(

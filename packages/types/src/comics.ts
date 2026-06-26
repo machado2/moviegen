@@ -3,6 +3,9 @@
 // An extension of MovieGen sharing the same monorepo, backend, and frontend.
 // ════════════════════════════════════════════════════════════════════════════
 
+// AssetVariant is shared with the film format (type-only import; erased at runtime).
+import type { AssetVariant } from './index.js';
+
 // ─── Project ──────────────────────────────────────────────────────────────────
 
 export interface ComicsProject {
@@ -45,6 +48,11 @@ export interface ComicsAsset {
   description?: string;           // human-readable notes
   skipped?: boolean;              // production queue: user skipped this unit (persisted)
   queuePriority?: number;         // production queue: manual ordering (lower = earlier); queue-only
+
+  // Generated/uploaded candidates; `file` mirrors the selected one. Same model
+  // as film assets — see AssetVariant in ./index.ts.
+  variants?: AssetVariant[];
+  selectedVariantId?: string | null;
 }
 
 // ─── Pranchas ─────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 
 import type { JobProgress } from '@mediagen/types';
 import { getProject } from './project.js';
-import { getAsset, uploadAssetFile } from './asset.js';
+import { addAssetVariant, getAsset } from './asset.js';
 import { getAiConfig } from './settings.js';
 import { generateImageViaGateway } from './imagegen.js';
 import { assertUnderCap, recordSpend } from './spend.js';
@@ -65,8 +65,16 @@ export async function startAssetImageGeneration(
     handle.update(0.1, `Gerando referência via ${model}…`);
     const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt });
     await recordSpend(dir, spend);
-    handle.update(0.85, 'Salvando imagem…');
-    await uploadAssetFile(projectId, assetId, png, `${assetId}.png`);
-    handle.update(1, 'Referência gerada');
+    handle.update(0.85, 'Salvando candidato…');
+    // Accumulate as a candidate; the user picks the keeper in the Estúdio.
+    await addAssetVariant(projectId, assetId, {
+      data: png,
+      originalName: `${assetId}.png`,
+      source: 'generated',
+      generationPrompt: prompt,
+      generationModel: model,
+      autoSelect: false,
+    });
+    handle.update(1, 'Candidato gerado');
   });
 }

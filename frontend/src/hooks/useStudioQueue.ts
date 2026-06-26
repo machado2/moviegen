@@ -114,6 +114,22 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         apiGenerate: (opts) =>
           api.assets.generateImage(projectId, asset.id, { model: opts?.model, prompt: referencePrompt }),
         followJob: (jobId) => followFilmJob(projectId, jobId),
+        selectedCandidateId: asset.selectedVariantId ?? null,
+        listCandidates: async () =>
+          (await api.assets.listVariants(projectId, asset.id)).map((v) => ({
+            id: v.id,
+            url: api.assets.variantUrl(projectId, asset.id, v.id),
+            accepts: 'image' as const,
+            source: v.source,
+            model: v.generationModel,
+            createdAt: v.createdAt,
+          })),
+        selectCandidate: async (id) => {
+          await api.assets.selectVariant(projectId, asset.id, id);
+        },
+        deleteCandidate: async (id) => {
+          await api.assets.removeVariant(projectId, asset.id, id);
+        },
       });
     }
 
@@ -157,6 +173,21 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
               prompt: buildShotPrompt(fresh, scene, shot),
             }),
           followJob: (jobId) => followFilmJob(projectId, jobId),
+          selectedCandidateId: shot.selectedTakeId,
+          listCandidates: async () =>
+            (await api.takes.list(projectId, scene.id, shot.id)).map((t) => ({
+              id: t.id,
+              url: api.takes.streamUrl(projectId, scene.id, shot.id, t.id),
+              accepts: 'video' as const,
+              source: t.source,
+              createdAt: t.createdAt,
+            })),
+          selectCandidate: async (id) => {
+            await api.takes.select(projectId, scene.id, shot.id, id);
+          },
+          deleteCandidate: async (id) => {
+            await api.takes.remove(projectId, scene.id, shot.id, id);
+          },
         });
       }
     }
@@ -225,6 +256,22 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
         apiGenerate: (opts) =>
           comicsApi.assets.generateImage(projectId, asset.id, { model: opts?.model, prompt: charPrompt }),
         followJob: (jobId) => followComicsJob(projectId, jobId),
+        selectedCandidateId: asset.selectedVariantId ?? null,
+        listCandidates: async () =>
+          (await comicsApi.assets.listVariants(projectId, asset.id)).map((v) => ({
+            id: v.id,
+            url: comicsApi.assets.variantUrl(projectId, asset.id, v.id),
+            accepts: 'image' as const,
+            source: v.source,
+            model: v.generationModel,
+            createdAt: v.createdAt,
+          })),
+        selectCandidate: async (id) => {
+          await comicsApi.assets.selectVariant(projectId, asset.id, id);
+        },
+        deleteCandidate: async (id) => {
+          await comicsApi.assets.removeVariant(projectId, asset.id, id);
+        },
       });
     }
 
@@ -268,6 +315,22 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
           },
           apiGenerate: (opts) => comicsApi.renders.generate(projectId, prancha.id, quadro.id, { model: opts?.model }),
           followJob: (jobId) => followComicsJob(projectId, jobId),
+          selectedCandidateId: quadro.selectedRenderId,
+          listCandidates: async () =>
+            (await comicsApi.renders.list(projectId, prancha.id, quadro.id)).map((r) => ({
+              id: r.id,
+              url: comicsApi.renders.imageUrl(projectId, prancha.id, quadro.id, r.id),
+              accepts: 'image' as const,
+              source: r.source,
+              model: r.generationModel,
+              createdAt: r.createdAt,
+            })),
+          selectCandidate: async (id) => {
+            await comicsApi.renders.select(projectId, prancha.id, quadro.id, id);
+          },
+          deleteCandidate: async (id) => {
+            await comicsApi.renders.remove(projectId, prancha.id, quadro.id, id);
+          },
         });
       }
     }

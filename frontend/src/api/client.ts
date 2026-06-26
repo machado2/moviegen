@@ -4,6 +4,7 @@ import type {
   ProjectSummary,
   CreateProjectInput,
   Asset,
+  AssetVariant,
   Scene,
   SceneRef,
   Shot,
@@ -245,6 +246,24 @@ export const assetsApi = {
     return request(`/projects/${projectId}/assets/${assetId}/generate-image`, {
       method: 'POST',
       body: json(opts ?? {}),
+    });
+  },
+  // ─── Variants (generated/uploaded candidates) ──────────────────────────────
+  listVariants(projectId: string, assetId: string): Promise<AssetVariant[]> {
+    return request(`/projects/${projectId}/assets/${assetId}/variants`);
+  },
+  variantUrl(projectId: string, assetId: string, variantId: string): string {
+    return `${BASE}/projects/${projectId}/assets/${assetId}/variants/${variantId}`;
+  },
+  selectVariant(projectId: string, assetId: string, variantId: string | null): Promise<Asset> {
+    return request(`/projects/${projectId}/assets/${assetId}/selected-variant`, {
+      method: 'PUT',
+      body: json({ variantId }),
+    });
+  },
+  removeVariant(projectId: string, assetId: string, variantId: string): Promise<Asset> {
+    return request(`/projects/${projectId}/assets/${assetId}/variants/${variantId}`, {
+      method: 'DELETE',
     });
   },
 };

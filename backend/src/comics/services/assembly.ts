@@ -9,7 +9,7 @@ import type {
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject } from './project.js';
-import { getAsset, uploadAssetFile } from './asset.js';
+import { addAssetVariant, getAsset } from './asset.js';
 import { getPrancha, listPranchaRefs } from './prancha.js';
 import { addRender } from './render.js';
 import { buildQuadroPrompt, promptAttachmentIds } from './prompt.js';
@@ -190,13 +190,14 @@ export async function startRenderGeneration(
     return jobQueue.start('render-generate', async (handle) => {
       handle.update(0.1, 'Gerando quadro via codex (local)…');
       const { png } = await generateFrame(prompt, attachmentPaths);
-      handle.update(0.85, 'Salvando render…');
+      handle.update(0.85, 'Salvando candidato…');
       await addRender(projectId, pranchaId, quadroId, {
         data: png,
         originalName: 'render.png',
         source: 'generated',
         generationPrompt: prompt,
         generationModel: 'codex',
+        autoSelect: false,
       });
       handle.update(1, 'Render gerado');
     });
@@ -216,13 +217,14 @@ export async function startRenderGeneration(
     handle.update(0.1, `Gerando quadro via ${model}…`);
     const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt, attachmentPaths });
     await recordSpend(dir, spend);
-    handle.update(0.85, 'Salvando render…');
+    handle.update(0.85, 'Salvando candidato…');
     await addRender(projectId, pranchaId, quadroId, {
       data: png,
       originalName: 'render.png',
       source: 'generated',
       generationPrompt: prompt,
       generationModel: model,
+      autoSelect: false,
     });
     handle.update(1, 'Render gerado');
   });
@@ -276,8 +278,15 @@ export async function startCharacterImageGeneration(
     handle.update(0.1, `Gerando personagem via ${model}…`);
     const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt });
     await recordSpend(dir, spend);
-    handle.update(0.85, 'Salvando imagem…');
-    await uploadAssetFile(projectId, assetId, png, `${assetId}.png`);
+    handle.update(0.85, 'Salvando candidato…');
+    await addAssetVariant(projectId, assetId, {
+      data: png,
+      originalName: `${assetId}.png`,
+      source: 'generated',
+      generationPrompt: prompt,
+      generationModel: model,
+      autoSelect: false,
+    });
     handle.update(1, 'Personagem gerado');
   });
 }

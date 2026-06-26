@@ -2,29 +2,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Clipboard,
   Copy,
+  Expand,
   Image as ImageIcon,
   Loader2,
   PlayCircle,
   RotateCcw,
   SkipForward,
-  Square,
+  Sparkles,
+  Trash2,
   Upload,
   Video,
-  Zap,
+  X,
 } from 'lucide-react';
 import type { SpendDTO } from '@mediagen/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { formatUsd, spendLabel } from '@/lib/cost';
 import {
   blobToFile,
   imageFromDataTransfer,
   orderStudioItems,
+  type StudioCandidate,
   type StudioItem,
 } from '@/lib/studio';
 
@@ -51,10 +54,27 @@ export interface EstudioProps {
   embedded?: boolean;
 }
 
-const tick = () => new Promise<void>((r) => setTimeout(r, 60));
+const tick = () => new Promise<void>((r) => setTimeout(r, 30));
 
-export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend, imageModels = [], videoModels = [], embedded = false }: EstudioProps) {
-  const allItems = useMemo(() => orderStudioItems(rawItems), [rawItems]);
+export function Estudio({
+  items: rawItems,
+  onRefresh,
+  emptyHint,
+  initialFocusKey,
+  spend: spendProp,
+  fetchSpend,
+  imageModels = [],
+  videoModels = [],
+  embedded = false,
+}: EstudioProps) {
+  // Optimistic overlay: skip/reorder apply instantly to a local copy (sub-100ms
+  // feedback) while the server write + queue refresh land in the background.
+  const [optimistic, setOptimistic] = useState<Record<string, { skipped?: boolean; queuePriority?: number }>>({});
+  const overlaidItems = useMemo(
+    () => rawItems.map((it) => (optimistic[it.key] ? { ...it, ...optimistic[it.key] } : it)),
+    [rawItems, optimistic],
+  );
+  const allItems = useMemo(() => orderStudioItems(overlaidItems), [overlaidItems]);
 
   // Sequence groups (scenes/pranchas) so a long queue can be produced one at a
   // time. References (no group) are always shown alongside the chosen group.
@@ -69,15 +89,12 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       ? 'Cena'
       : 'Grupo';
 
-  // Selected scope: a group id, or 'all'. Null = follow the default (the focused
-  // item's group, else the first group). Picking from the selector pins it.
   const [scopeId, setScopeId] = useState<string | null>(null);
   const focusGroupId = initialFocusKey
     ? allItems.find((i) => i.key === initialFocusKey)?.group?.id
     : undefined;
   const scope = scopeId ?? focusGroupId ?? groups[0]?.id ?? 'all';
 
-  // The scoped view the queue/loop operate on: references + the chosen group.
   const items = useMemo(
     () => allItems.filter((i) => !i.group || scope === 'all' || i.group.id === scope),
     [allItems, scope],
@@ -88,33 +105,27 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   }, [items]);
 
   const [focusKey, setFocusKey] = useState<string | null>(initialFocusKey ?? null);
-  // Honor an externally-requested focus (e.g. "produzir este" from the Storyboard);
-  // also unpin the scope so the view jumps to that item's group.
   useEffect(() => {
     if (initialFocusKey) {
       setFocusKey(initialFocusKey);
       setScopeId(null);
     }
   }, [initialFocusKey]);
+
   const [prompt, setPrompt] = useState<string>('');
   const [promptLoading, setPromptLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // upload/select/delete in flight (non-blocking visually)
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [last, setLast] = useState<{ url: string; label: string } | null>(null);
-  const [review, setReview] = useState<{ url: string; label: string; key?: string } | null>(null);
   const [sessionCount, setSessionCount] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // Spend: mirror the prop locally so the API loop can refresh it (and read the
-  // latest via a ref) without waiting on the parent re-render.
+  // ─── Spend mirror ───────────────────────────────────────────────────────────
   const [spend, setSpend] = useState<SpendDTO | null>(spendProp ?? null);
   const [lastItemCost, setLastItemCost] = useState<number | null>(null);
   const spendRef = useRef<SpendDTO | null>(spend);
-  useEffect(() => {
-    setSpend(spendProp ?? null);
-  }, [spendProp]);
+  useEffect(() => setSpend(spendProp ?? null), [spendProp]);
   useEffect(() => {
     spendRef.current = spend;
   }, [spend]);
@@ -130,9 +141,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     }
   }, [fetchSpend]);
 
-  // API mode
-  const [apiRunning, setApiRunning] = useState(false);
-  // Image/video models chosen for gateway generation; default to the first configured.
+  // ─── Model selection ──────────────────────────────────────────────────────────
   const [imageModel, setImageModel] = useState<string>(imageModels[0] ?? '');
   const imageModelRef = useRef(imageModel);
   useEffect(() => {
@@ -143,24 +152,12 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   useEffect(() => {
     videoModelRef.current = videoModel;
   }, [videoModel]);
-  // Keep the selections valid as the configured lists change.
   useEffect(() => {
     setImageModel((cur) => (cur && imageModels.includes(cur) ? cur : imageModels[0] ?? ''));
   }, [imageModels]);
   useEffect(() => {
     setVideoModel((cur) => (cur && videoModels.includes(cur) ? cur : videoModels[0] ?? ''));
   }, [videoModels]);
-  const [rateSec, setRateSec] = useState(60);
-  const [countdown, setCountdown] = useState(0);
-  const stopRef = useRef(false);
-  const rateRef = useRef(60);
-  useEffect(() => {
-    rateRef.current = rateSec;
-  }, [rateSec]);
-  // Stop any running API loop if the screen unmounts (e.g. tab switch).
-  useEffect(() => () => {
-    stopRef.current = true;
-  }, []);
 
   // Resolve the focused item; default to the first active (pending, not skipped).
   const current = useMemo(() => {
@@ -169,26 +166,73 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       if (f) return f;
     }
     return (
-      items.find((i) => !i.done && !i.skipped) ??
-      items.find((i) => !i.done) ??
-      items[0] ??
-      null
+      items.find((i) => !i.done && !i.skipped) ?? items.find((i) => !i.done) ?? items[0] ?? null
     );
   }, [items, focusKey]);
 
   const currentIsVideo = current?.accepts === 'video';
   const activeModel = currentIsVideo ? videoModel : imageModel;
+  const modelMissing = currentIsVideo ? videoModels.length === 0 : imageModels.length === 0;
   const doneCount = items.filter((i) => i.done).length;
   const skippedCount = items.filter((i) => !i.done && i.skipped).length;
   const pendingCount = items.length - doneCount - skippedCount;
-  const apiCapable = items.some((i) => !i.done && !i.skipped && i.apiGenerate);
-  // Reorder affordance bounds: position of the current unit within its active kind group.
-  const moveGroup = current ? items.filter((i) => i.kind === current.kind && !i.done && !i.skipped) : [];
+
+  // Reorder bounds within the active kind group.
+  const moveGroup = current
+    ? items.filter((i) => i.kind === current.kind && !i.done && !i.skipped)
+    : [];
   const movePos = current ? moveGroup.findIndex((i) => i.key === current.key) : -1;
   const canMoveUp = movePos > 0;
   const canMoveDown = movePos >= 0 && movePos < moveGroup.length - 1;
 
-  // Load the current item's prompt whenever it changes.
+  // ─── Candidates (per-item gallery) ────────────────────────────────────────────
+  const [candidates, setCandidates] = useState<StudioCandidate[]>([]);
+  const [candLoading, setCandLoading] = useState(false);
+  // Local optimistic selection so a click highlights instantly (<200ms), before
+  // the server round-trip + queue refresh land.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const reloadCandidates = useCallback(async (item: StudioItem | null) => {
+    if (!item?.listCandidates) {
+      setCandidates([]);
+      return;
+    }
+    setCandLoading(true);
+    try {
+      const list = await item.listCandidates();
+      list.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+      setCandidates(list);
+    } catch {
+      setCandidates([]);
+    } finally {
+      setCandLoading(false);
+    }
+  }, []);
+
+  // Switching item: reload its candidates and sync the selection from the queue.
+  // Clear first so the gallery never flashes the previous item's candidates.
+  const currentKey = current?.key ?? null;
+  useEffect(() => {
+    setSelectedId(current?.selectedCandidateId ?? null);
+    setCandidates([]);
+    void reloadCandidates(current ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey]);
+  // Reconcile the selection when the queue refresh reports a new chosen result.
+  useEffect(() => {
+    setSelectedId(current?.selectedCandidateId ?? null);
+  }, [current?.selectedCandidateId]);
+
+  const selectedCandidate = candidates.find((c) => c.id === selectedId) ?? null;
+  // Instant preview on item switch: the queue already knows the selected result's
+  // thumbnail (images), so show it before the candidate list round-trip lands.
+  const preview = selectedCandidate
+    ? { url: selectedCandidate.url, accepts: selectedCandidate.accepts }
+    : current?.done && current.thumbnailUrl
+      ? { url: current.thumbnailUrl, accepts: current.accepts }
+      : null;
+
+  // ─── Prompt loading ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!current) {
       setPrompt('');
@@ -198,20 +242,15 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     setPromptLoading(true);
     void current
       .getPrompt()
-      .then((p) => {
-        if (alive) setPrompt(p);
-      })
-      .catch((e) => {
-        if (alive) setPrompt(`(falha ao montar o prompt: ${String(e instanceof Error ? e.message : e)})`);
-      })
-      .finally(() => {
-        if (alive) setPromptLoading(false);
-      });
+      .then((p) => alive && setPrompt(p))
+      .catch((e) => alive && setPrompt(`(falha ao montar o prompt: ${String(e instanceof Error ? e.message : e)})`))
+      .finally(() => alive && setPromptLoading(false));
     return () => {
       alive = false;
     };
   }, [current]);
 
+  // ─── Navigation (pure local → instant) ────────────────────────────────────────
   const advance = useCallback(() => {
     const list = itemsRef.current;
     const idx = current ? list.findIndex((i) => i.key === current.key) : -1;
@@ -221,6 +260,24 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     if (next) setFocusKey(next.key);
   }, [current]);
 
+  const goPrev = useCallback(() => {
+    const list = itemsRef.current;
+    const idx = current ? list.findIndex((i) => i.key === current.key) : 0;
+    const prev = list[Math.max(0, idx - 1)];
+    if (prev) setFocusKey(prev.key);
+  }, [current]);
+
+  const goNext = useCallback(() => {
+    const list = itemsRef.current;
+    const idx = current ? list.findIndex((i) => i.key === current.key) : -1;
+    const nxt = list[Math.min(list.length - 1, idx + 1)];
+    if (nxt) setFocusKey(nxt.key);
+  }, [current]);
+
+  // ─── Fullscreen viewer ────────────────────────────────────────────────────────
+  const [viewer, setViewer] = useState<{ url: string; accepts: 'image' | 'video'; label: string } | null>(null);
+
+  // ─── Upload (manual: auto-selects on the server) ──────────────────────────────
   const submitFile = useCallback(
     async (file: File) => {
       if (!current) return;
@@ -228,18 +285,17 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       setError(null);
       try {
         await current.submit(file);
-        const url = URL.createObjectURL(file);
-        setLast({ url, label: current.label });
         await onRefresh();
         await tick();
-        advance();
+        await reloadCandidates(itemsRef.current.find((i) => i.key === current.key) ?? current);
+        setSessionCount((c) => c + 1);
       } catch (e) {
         setError(String(e instanceof Error ? e.message : e));
       } finally {
         setBusy(false);
       }
     },
-    [current, onRefresh, advance],
+    [current, onRefresh, reloadCandidates],
   );
 
   const copyPrompt = useCallback(() => {
@@ -249,28 +305,115 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     });
   }, [prompt]);
 
-  // Persist skip/unskip of the current unit; after skipping, move on.
-  const toggleSkip = useCallback(async () => {
-    if (!current) return;
-    const wasSkipped = current.skipped;
-    setBusy(true);
-    setError(null);
-    try {
-      await current.setSkipped(!wasSkipped);
-      await onRefresh();
-      await tick();
-      if (!wasSkipped) advance(); // just skipped → jump to the next active unit
-    } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
-    } finally {
-      setBusy(false);
-    }
-  }, [current, onRefresh, advance]);
+  // ─── API generation (per-item, no auto-advance, no auto-select) ───────────────
+  const [generating, setGenerating] = useState(false);
+  const [genElapsed, setGenElapsed] = useState(0);
+  useEffect(() => {
+    if (!generating) return;
+    const started = Date.now();
+    setGenElapsed(0);
+    const id = setInterval(() => setGenElapsed(Math.round((Date.now() - started) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [generating]);
 
-  // Reorder the current unit within its kind group by swapping queue priority
-  // with the adjacent active sibling (queue-only; never touches narrative order).
+  const generate = useCallback(async () => {
+    if (!current?.apiGenerate || generating) return;
+    if (spendRef.current?.capReached) {
+      const cap = spendRef.current.capUsd;
+      setError(
+        `Teto de gasto atingido${cap != null ? ` (US$ ${cap.toFixed(2)})` : ''}. ` +
+          'Ajuste o teto em Configurações para gerar mais.',
+      );
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    const before = spendRef.current?.totalUsd ?? 0;
+    const target = current;
+    try {
+      const model = (target.accepts === 'video' ? videoModelRef.current : imageModelRef.current) || undefined;
+      const res = await target.apiGenerate!({ model });
+      if (res && 'jobId' in res && target.followJob) await target.followJob(res.jobId);
+      setSessionCount((c) => c + 1);
+      await onRefresh();
+      await reloadCandidates(itemsRef.current.find((i) => i.key === target.key) ?? target);
+      const after = await refreshSpend();
+      setLastItemCost(after?.hasCost && after.totalUsd > before ? after.totalUsd - before : null);
+    } catch (e) {
+      setError(`Geração falhou: ${String(e instanceof Error ? e.message : e)}`);
+    } finally {
+      setGenerating(false);
+    }
+  }, [current, generating, onRefresh, reloadCandidates, refreshSpend]);
+
+  // ─── Candidate choose/delete (optimistic → instant) ───────────────────────────
+  const chooseCandidate = useCallback(
+    (id: string) => {
+      if (!current?.selectCandidate) return;
+      setSelectedId(id); // instant highlight
+      const target = current;
+      void (async () => {
+        try {
+          await target.selectCandidate!(id);
+          await onRefresh();
+        } catch (e) {
+          setError(String(e instanceof Error ? e.message : e));
+        }
+      })();
+    },
+    [current, onRefresh],
+  );
+
+  const removeCandidate = useCallback(
+    (id: string) => {
+      if (!current?.deleteCandidate) return;
+      setCandidates((prev) => prev.filter((c) => c.id !== id)); // instant removal
+      setSelectedId((cur) => (cur === id ? null : cur));
+      const target = current;
+      void (async () => {
+        try {
+          await target.deleteCandidate!(id);
+          await onRefresh();
+          await reloadCandidates(itemsRef.current.find((i) => i.key === target.key) ?? target);
+        } catch (e) {
+          setError(String(e instanceof Error ? e.message : e));
+          void reloadCandidates(target);
+        }
+      })();
+    },
+    [current, onRefresh, reloadCandidates],
+  );
+
+  // ─── Skip / reorder (optimistic → instant, persist in background) ─────────────
+  const clearOptimistic = useCallback((keys: string[]) => {
+    setOptimistic((prev) => {
+      const next = { ...prev };
+      for (const k of keys) delete next[k];
+      return next;
+    });
+  }, []);
+
+  const toggleSkip = useCallback(() => {
+    if (!current) return;
+    const key = current.key;
+    const wasSkipped = current.skipped;
+    setError(null);
+    setOptimistic((prev) => ({ ...prev, [key]: { ...prev[key], skipped: !wasSkipped } }));
+    if (!wasSkipped) advance(); // jump immediately
+    void (async () => {
+      try {
+        await current.setSkipped(!wasSkipped);
+        await onRefresh();
+      } catch (e) {
+        setError(String(e instanceof Error ? e.message : e));
+      } finally {
+        clearOptimistic([key]);
+      }
+    })();
+  }, [current, onRefresh, advance, clearOptimistic]);
+
   const move = useCallback(
-    async (dir: -1 | 1) => {
+    (dir: -1 | 1) => {
       if (!current) return;
       const list = itemsRef.current;
       const group = list.filter((i) => i.kind === current.kind && !i.done && !i.skipped);
@@ -280,26 +423,32 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
       const eff = (i: StudioItem) => i.queuePriority ?? list.findIndex((x) => x.key === i.key);
       const a = eff(current);
       const b = eff(neighbor);
-      setBusy(true);
       setError(null);
-      try {
-        await current.setPriority(b);
-        await neighbor.setPriority(a);
-        await onRefresh();
-        await tick();
-      } catch (e) {
-        setError(String(e instanceof Error ? e.message : e));
-      } finally {
-        setBusy(false);
-      }
+      // Instant swap in the local overlay; persist both in the background.
+      setOptimistic((prev) => ({
+        ...prev,
+        [current.key]: { ...prev[current.key], queuePriority: b },
+        [neighbor.key]: { ...prev[neighbor.key], queuePriority: a },
+      }));
+      void (async () => {
+        try {
+          await current.setPriority(b);
+          await neighbor.setPriority(a);
+          await onRefresh();
+        } catch (e) {
+          setError(String(e instanceof Error ? e.message : e));
+        } finally {
+          clearOptimistic([current.key, neighbor.key]);
+        }
+      })();
     },
-    [current, onRefresh],
+    [current, onRefresh, clearOptimistic],
   );
 
-  // Global paste → advance (image items only, manual mode).
+  // ─── Global paste → upload candidate (image items, manual mode) ───────────────
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (apiRunning || busy || !current || current.accepts !== 'image') return;
+      if (generating || busy || !current || current.accepts !== 'image') return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       const blob = imageFromDataTransfer(e.clipboardData?.items ?? null);
@@ -310,88 +459,24 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     };
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
-  }, [apiRunning, busy, current, submitFile]);
+  }, [generating, busy, current, submitFile]);
 
-  // Keyboard shortcuts for the loop.
+  // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (apiRunning) return;
+      if (viewer && e.key === 'Escape') {
+        setViewer(null);
+        return;
+      }
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-      if (e.key === 'ArrowRight') advance();
-      else if (e.key === 'ArrowLeft') {
-        const list = itemsRef.current;
-        const idx = current ? list.findIndex((i) => i.key === current.key) : 0;
-        const prev = list[Math.max(0, idx - 1)];
-        if (prev) setFocusKey(prev.key);
-      } else if (e.key.toLowerCase() === 'c') copyPrompt();
+      if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key.toLowerCase() === 'c') copyPrompt();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [apiRunning, advance, current, copyPrompt]);
-
-  // ─── API generation loop ──────────────────────────────────────────────────
-  const waitRate = useCallback(async (secs: number) => {
-    for (let s = secs; s > 0; s--) {
-      if (stopRef.current) return;
-      setCountdown(s);
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    setCountdown(0);
-  }, []);
-
-  const runApi = useCallback(async () => {
-    stopRef.current = false;
-    setApiRunning(true);
-    setError(null);
-    try {
-      let first = true;
-      while (!stopRef.current) {
-        // Spend cap: pause automatically once the project reaches its ceiling so
-        // we never quietly keep spending past the configured limit.
-        if (spendRef.current?.capReached) {
-          const cap = spendRef.current.capUsd;
-          setError(
-            `Teto de gasto atingido${cap != null ? ` (US$ ${cap.toFixed(2)})` : ''} — geração pausada. ` +
-              'Ajuste o teto em Configurações para continuar.',
-          );
-          break;
-        }
-        const next = itemsRef.current.find((i) => !i.done && !i.skipped && i.apiGenerate);
-        if (!next) break;
-        if (!first) await waitRate(rateRef.current);
-        if (stopRef.current) break;
-        first = false;
-        setFocusKey(next.key);
-        setBusy(true);
-        const before = spendRef.current?.totalUsd ?? 0;
-        try {
-          const model = (next.accepts === 'video' ? videoModelRef.current : imageModelRef.current) || undefined;
-          const res = await next.apiGenerate!({ model });
-          if (res && 'jobId' in res && next.followJob) await next.followJob(res.jobId);
-          setSessionCount((c) => c + 1);
-        } catch (e) {
-          setError(`Geração interrompida: ${String(e instanceof Error ? e.message : e)}`);
-          stopRef.current = true;
-        } finally {
-          setBusy(false);
-        }
-        await onRefresh();
-        // Refresh spend and surface this item's cost when the gateway reported one.
-        const after = await refreshSpend();
-        setLastItemCost(after?.hasCost && after.totalUsd > before ? after.totalUsd - before : null);
-        await tick();
-      }
-    } finally {
-      setApiRunning(false);
-      setCountdown(0);
-    }
-  }, [onRefresh, waitRate, refreshSpend]);
-
-  const stopApi = useCallback(() => {
-    stopRef.current = true;
-    setApiRunning(false);
-  }, []);
+  }, [viewer, goNext, goPrev, copyPrompt]);
 
   if (allItems.length === 0) {
     return (
@@ -402,73 +487,86 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
   }
 
   const progressPct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+  const canGenerate = Boolean(current?.apiGenerate) && !modelMissing;
+  const acceptsLabel = current?.accepts === 'video' ? 'vídeo' : 'imagem';
 
   return (
-    <div className="space-y-4">
-      {/* Header: progress + API toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-5">
+      {/* ─── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium">{current?.label ?? '—'}</span>
-            {current?.sublabel && <span className="text-muted-foreground">· {current.sublabel}</span>}
+          <div className="flex items-center gap-2">
+            <span className="truncate text-base font-semibold">{current?.label ?? '—'}</span>
+            {current?.sublabel && (
+              <span className="truncate text-sm text-muted-foreground">· {current.sublabel}</span>
+            )}
+            {current && (
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                  current.done
+                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                    : current.skipped
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+                )}
+              >
+                {current.done ? 'escolhido' : current.skipped ? 'pulado' : 'pendente'}
+              </span>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {!embedded && (
               <>
                 {doneCount}/{items.length} prontos · {pendingCount} na fila
                 {skippedCount > 0 && ` · ${skippedCount} pulados`}
-                {sessionCount > 0 && ` · ${sessionCount} gerados nesta sessão`}
+                {sessionCount > 0 && ` · ${sessionCount} gerados na sessão`}
                 {' · '}
               </>
             )}
             custo IA: {spendLabel(spend)}
             {spend?.capUsd != null && ` / $${spend.capUsd.toFixed(2)}`}
+            {lastItemCost != null && ` · último: ${formatUsd(lastItemCost)}`}
           </p>
         </div>
+
         <div className="flex items-center gap-2">
-          {!apiRunning && apiCapable && currentIsVideo && videoModels.length > 0 && (
+          {current?.apiGenerate && !modelMissing && (
             <select
-              value={videoModel}
-              onChange={(e) => setVideoModel(e.target.value)}
-              title="Modelo de vídeo (gateway)"
-              className="h-9 max-w-[16rem] rounded-md border bg-background px-2 text-sm"
+              value={activeModel}
+              onChange={(e) => (currentIsVideo ? setVideoModel(e.target.value) : setImageModel(e.target.value))}
+              title={`Modelo de ${acceptsLabel} (gateway)`}
+              disabled={generating}
+              className="h-9 max-w-[15rem] rounded-md border bg-background px-2 text-sm disabled:opacity-50"
             >
-              {videoModels.map((m) => (
-                <option key={m} value={m}>{m}</option>
+              {(currentIsVideo ? videoModels : imageModels).map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
             </select>
           )}
-          {!apiRunning && apiCapable && !currentIsVideo && imageModels.length > 0 && (
-            <select
-              value={imageModel}
-              onChange={(e) => setImageModel(e.target.value)}
-              title="Modelo de imagem (gateway)"
-              className="h-9 max-w-[16rem] rounded-md border bg-background px-2 text-sm"
-            >
-              {imageModels.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          )}
-          {!apiRunning && apiCapable && (
+          {current?.apiGenerate && (
             <Button
-              onClick={() => void runApi()}
-              className="gap-1"
+              onClick={() => void generate()}
+              disabled={generating || modelMissing}
+              className="gap-1.5"
               title={
-                currentIsVideo && videoModels.length === 0
-                  ? 'Configure um modelo de vídeo em Configurações'
-                  : !currentIsVideo && imageModels.length === 0
-                    ? 'Configure um modelo de imagem em Configurações'
-                    : undefined
+                modelMissing ? `Configure um modelo de ${acceptsLabel} em Configurações` : undefined
               }
             >
-              <Zap className="h-4 w-4" /> Gerar com API
+              {generating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {generating ? `Gerando… ${genElapsed}s` : 'Gerar'}
             </Button>
           )}
         </div>
       </div>
 
-      {/* Scope selector: produce one scene/prancha at a time (refs always shown) */}
+      {/* Scope selector */}
       {!embedded && groups.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">{groupNoun}:</span>
@@ -479,29 +577,41 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           >
             <option value="all">Todas ({groups.length})</option>
             {groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.label}</option>
+              <option key={g.id} value={g.id}>
+                {g.label}
+              </option>
             ))}
           </select>
           <span className="text-xs text-muted-foreground">· referências sempre visíveis</span>
         </div>
       )}
 
-      <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
       </div>
 
-      {/* Main two-column: prompt | result */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <X className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-destructive/70 hover:text-destructive">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ─── Main: prompt | result ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* PROMPT */}
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prompt</h3>
             <Button variant="outline" size="sm" onClick={copyPrompt} className="gap-1">
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? 'Copiado' : 'Copiar prompt'}
+              {copied ? 'Copiado' : 'Copiar'}
             </Button>
           </div>
-          <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs leading-relaxed">
+          <pre className="max-h-[420px] flex-1 overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
             {promptLoading ? 'Montando prompt…' : prompt}
           </pre>
           {current && current.getAttachments().length > 0 && (
@@ -511,15 +621,15 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
               </h4>
               <div className="flex flex-wrap gap-2">
                 {current.getAttachments().map((a) => (
-                  <a
+                  <button
                     key={a.url}
-                    href={a.url}
-                    download
-                    title={`${a.label} (clique para baixar)`}
+                    type="button"
+                    onClick={() => setViewer({ url: a.url, accepts: 'image', label: a.label })}
+                    title={`${a.label} (clique para ampliar)`}
                     className="block h-16 w-16 overflow-hidden rounded border hover:ring-2 hover:ring-primary"
                   >
                     <img src={a.url} alt={a.label} className="h-full w-full object-cover" />
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>
@@ -527,143 +637,137 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
         </div>
 
         {/* RESULT */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resultado</h3>
-
-          {apiRunning ? (
-            <div className="space-y-3 rounded-md border border-primary/40 bg-primary/5 p-4">
-              <p className="flex items-center gap-2 text-sm font-medium">
-                <Loader2 className="h-4 w-4 animate-spin" /> Gerando: {current?.label}
-                {activeModel && <span className="font-normal text-muted-foreground">· {activeModel}</span>}
-              </p>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Limite de taxa:</span>
-                <Input
-                  type="number"
-                  min={5}
-                  value={rateSec}
-                  onChange={(e) => setRateSec(Math.max(5, Number(e.target.value) || 60))}
-                  className="h-8 w-20"
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Resultado escolhido
+          </h3>
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              if (!current) return;
+              if (current.accepts === 'image') {
+                const blob = imageFromDataTransfer(e.dataTransfer.items);
+                if (blob) void submitFile(blobToFile(blob, current.key));
+              } else {
+                const f = e.dataTransfer.files?.[0];
+                if (f) void submitFile(f);
+              }
+            }}
+            className={cn(
+              'group relative flex min-h-[280px] flex-1 items-center justify-center overflow-hidden rounded-lg border-2 border-dashed p-4 text-center text-sm transition-colors',
+              dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/25',
+            )}
+          >
+            {generating ? (
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <Loader2 className="h-9 w-9 animate-spin text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Gerando {acceptsLabel}…</p>
+                  <p className="text-xs">
+                    {activeModel} · {genElapsed}s
+                  </p>
+                </div>
+              </div>
+            ) : busy ? (
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                <Loader2 className="h-9 w-9 animate-spin text-primary" />
+                <p className="font-medium text-foreground">Enviando arquivo…</p>
+              </div>
+            ) : preview ? (
+              <>
+                {preview.accepts === 'video' ? (
+                  <video src={preview.url} controls className="max-h-[360px] w-full rounded object-contain" />
+                ) : (
+                  <img
+                    src={preview.url}
+                    alt={current?.label}
+                    className="max-h-[360px] w-auto rounded object-contain"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewer({ url: preview.url, accepts: preview.accepts, label: current?.label ?? '' })
+                  }
+                  title="Ver em tela cheia"
+                  className="absolute right-2 top-2 rounded-md bg-background/80 p-1.5 opacity-0 shadow-sm backdrop-blur transition-opacity hover:bg-background group-hover:opacity-100"
+                >
+                  <Expand className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                {current?.accepts === 'image' ? (
+                  <Clipboard className="h-9 w-9" />
+                ) : (
+                  <Video className="h-9 w-9" />
+                )}
+                <p className="max-w-[18rem]">
+                  {candidates.length > 0
+                    ? 'Nenhum candidato escolhido ainda. Escolha um abaixo.'
+                    : current?.accepts === 'image'
+                      ? 'Gere com a IA, cole (Ctrl/Cmd-V) ou arraste uma imagem aqui.'
+                      : 'Gere com a IA ou arraste um arquivo de vídeo aqui.'}
+                </p>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept={current?.accepts === 'video' ? 'video/*' : 'image/*'}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void submitFile(f);
+                    e.target.value = '';
+                  }}
                 />
-                <span className="text-muted-foreground">s</span>
-                {countdown > 0 && <span className="text-muted-foreground">· próximo em {countdown}s</span>}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInput.current?.click()}
+                  className="gap-1"
+                >
+                  {current?.accepts === 'video' ? (
+                    <Upload className="h-4 w-4" />
+                  ) : (
+                    <ImageIcon className="h-4 w-4" />
+                  )}
+                  Enviar arquivo
+                </Button>
               </div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>
-                  Custo IA: <span className="font-medium text-foreground">{spendLabel(spend)}</span>
-                  {spend?.capUsd != null && ` de $${spend.capUsd.toFixed(2)}`}
-                </span>
-                <span>
-                  · Último item: {lastItemCost != null ? formatUsd(lastItemCost) : '—'}
-                </span>
-              </div>
-              <Button variant="destructive" size="lg" onClick={stopApi} className="w-full gap-2">
-                <Square className="h-5 w-5" /> PARAR GERAÇÃO
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Gera um por vez, com limite forte, para você perceber um erro antes de gastar demais.
-                Custo só aparece quando o gateway o informa (imagens via codex ficam em “—”).
-              </p>
-            </div>
-          ) : (
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                if (!current) return;
-                if (current.accepts === 'image') {
-                  const blob = imageFromDataTransfer(e.dataTransfer.items);
-                  if (blob) void submitFile(blobToFile(blob, current.key));
-                } else {
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) void submitFile(f);
-                }
-              }}
-              className={cn(
-                'flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-md border-2 border-dashed p-6 text-center text-sm',
-                dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/30',
-              )}
-            >
-              {busy ? (
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              ) : current?.done && current.thumbnailUrl ? (
-                <>
-                  <img src={current.thumbnailUrl} alt={current.label} className="max-h-40 rounded" />
-                  <p className="text-muted-foreground">
-                    Já gerado. {current.accepts === 'image' ? 'Cole/arraste' : 'Envie um arquivo'} para substituir.
-                  </p>
-                </>
-              ) : current?.done ? (
-                <>
-                  <Check className="h-8 w-8 text-emerald-500" />
-                  <p className="text-muted-foreground">
-                    Já gerado. {current.accepts === 'image' ? 'Cole/arraste' : 'Envie um arquivo'} para substituir.
-                  </p>
-                </>
-              ) : current?.accepts === 'image' ? (
-                <>
-                  <Clipboard className="h-8 w-8 text-muted-foreground" />
-                  <p>
-                    Cole uma imagem (Ctrl/Cmd-V) ou arraste aqui.
-                    <br />
-                    Ao colar, salva e avança para o próximo.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Video className="h-8 w-8 text-muted-foreground" />
-                  <p>Arraste um arquivo de vídeo aqui ou envie abaixo.</p>
-                </>
-              )}
-              <input
-                ref={fileInput}
-                type="file"
-                accept={current?.accepts === 'video' ? 'video/*' : 'image/*'}
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void submitFile(f);
-                  e.target.value = '';
-                }}
-              />
-              <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()} className="gap-1">
-                {current?.accepts === 'video' ? <Upload className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
-                Enviar arquivo
-              </Button>
-            </div>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
+            )}
+          </div>
 
           {/* manual nav */}
-          {!embedded && !apiRunning && current && (
+          {!embedded && current && (
             <div className="flex flex-wrap items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={goPrev} className="gap-1">
+                <ChevronLeft className="h-4 w-4" /> Anterior
+              </Button>
+              <Button variant="ghost" size="sm" onClick={goNext} className="gap-1">
+                Próximo <ChevronRight className="h-4 w-4" />
+              </Button>
+              <span className="mx-1 h-4 w-px bg-border" />
               {current.skipped ? (
-                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} disabled={busy} className="gap-1">
+                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
                   <PlayCircle className="h-4 w-4" /> Retomar
                 </Button>
               ) : (
-                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} disabled={busy} className="gap-1">
+                <Button variant="ghost" size="sm" onClick={() => void toggleSkip()} className="gap-1">
                   <SkipForward className="h-4 w-4" /> Pular
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={advance} className="gap-1">
-                <ChevronRight className="h-4 w-4" /> Próximo
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setFocusKey(current.key)} className="gap-1">
-                <RotateCcw className="h-4 w-4" /> Refazer este
-              </Button>
               <span className="mx-1 h-4 w-px bg-border" />
               <Button
                 variant="ghost"
                 size="icon"
                 title="Mover antes na fila"
-                disabled={busy || !canMoveUp}
+                disabled={!canMoveUp}
                 onClick={() => void move(-1)}
                 className="h-8 w-8"
               >
@@ -673,7 +777,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
                 variant="ghost"
                 size="icon"
                 title="Mover depois na fila"
-                disabled={busy || !canMoveDown}
+                disabled={!canMoveDown}
                 onClick={() => void move(1)}
                 className="h-8 w-8"
               >
@@ -684,63 +788,150 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
         </div>
       </div>
 
-      {/* Queue rail */}
-      {!embedded && (
-      <div className="space-y-1">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fila</h4>
-        <div className="flex flex-wrap gap-1">
-          {items.map((it) => (
-            <button
-              key={it.key}
-              type="button"
-              title={`${it.label}${it.sublabel ? ` · ${it.sublabel}` : ''}`}
-              onClick={() => setFocusKey(it.key)}
-              className={cn(
-                'h-7 rounded px-2 text-xs',
-                it.key === current?.key
-                  ? 'bg-primary text-primary-foreground'
-                  : it.done
-                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                    : it.skipped
-                      ? 'bg-muted/50 text-muted-foreground/60 line-through'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/70',
-              )}
-            >
-              {it.done ? '●' : it.skipped ? '⤓' : '○'}{' '}
-              {it.label.length > 16 ? it.label.slice(0, 15) + '…' : it.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      )}
-
-      {/* Last-pasted corner */}
-      {last && (
-        <button
-          type="button"
-          onClick={() => setReview({ ...last })}
-          title="Último colado — clique para revisar"
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-lg border bg-background/95 p-2 shadow-lg backdrop-blur hover:ring-2 hover:ring-primary"
-        >
-          <img src={last.url} alt={last.label} className="h-12 w-12 rounded object-cover" />
-          <span className="max-w-[120px] truncate pr-1 text-xs">{last.label}</span>
-        </button>
-      )}
-
-      {/* Review overlay */}
-      {review && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
-          onClick={() => setReview(null)}
-        >
-          <div className="max-h-full max-w-2xl overflow-auto rounded-lg bg-background p-4" onClick={(e) => e.stopPropagation()}>
-            <p className="mb-2 text-sm font-medium">{review.label}</p>
-            <img src={review.url} alt={review.label} className="max-h-[70vh] w-auto rounded" />
-            <div className="mt-3 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setReview(null)}>
-                Fechar
-              </Button>
+      {/* ─── Candidate gallery ──────────────────────────────────────────────── */}
+      {current?.listCandidates && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Candidatos {candidates.length > 0 && `(${candidates.length})`}
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              Gere quantos quiser; nada é descartado. Escolha um para usar.
+            </span>
+          </div>
+          {candLoading && candidates.length === 0 ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando candidatos…
             </div>
+          ) : candidates.length === 0 ? (
+            <p className="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">
+              Nenhum candidato ainda. Clique em <span className="font-medium">Gerar</span> ou envie um arquivo.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+              {candidates.map((c) => {
+                const chosen = c.id === selectedId;
+                return (
+                  <div
+                    key={c.id}
+                    className={cn(
+                      'group relative overflow-hidden rounded-lg border bg-card transition-shadow',
+                      chosen ? 'ring-2 ring-primary' : 'hover:shadow-md',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setViewer({ url: c.url, accepts: c.accepts, label: current.label })}
+                      title="Ver em tela cheia"
+                      className="block aspect-square w-full bg-muted"
+                    >
+                      {c.accepts === 'video' ? (
+                        <video src={c.url} muted className="h-full w-full object-cover" />
+                      ) : (
+                        <img src={c.url} alt="" className="h-full w-full object-cover" />
+                      )}
+                    </button>
+
+                    {/* badges */}
+                    <div className="pointer-events-none absolute left-1.5 top-1.5 flex gap-1">
+                      {chosen && (
+                        <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+                          em uso
+                        </span>
+                      )}
+                      <span className="rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground backdrop-blur">
+                        {c.source === 'generated' ? 'IA' : 'upload'}
+                      </span>
+                    </div>
+
+                    {/* hover actions */}
+                    <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      {chosen ? (
+                        <span className="flex flex-1 items-center justify-center gap-1 rounded bg-primary/90 px-2 py-1 text-[11px] font-medium text-primary-foreground">
+                          <Check className="h-3 w-3" /> Em uso
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => chooseCandidate(c.id)}
+                          className="flex-1 rounded bg-white/90 px-2 py-1 text-[11px] font-medium text-black hover:bg-white"
+                        >
+                          Usar esta
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeCandidate(c.id)}
+                        title="Excluir candidato"
+                        className="rounded bg-white/90 p-1 text-destructive hover:bg-white"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {c.model && (
+                      <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground" title={c.model}>
+                        {c.model}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Queue rail ─────────────────────────────────────────────────────── */}
+      {!embedded && (
+        <div className="space-y-1">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fila</h4>
+          <div className="flex flex-wrap gap-1">
+            {items.map((it) => (
+              <button
+                key={it.key}
+                type="button"
+                title={`${it.label}${it.sublabel ? ` · ${it.sublabel}` : ''}`}
+                onClick={() => setFocusKey(it.key)}
+                className={cn(
+                  'h-7 rounded px-2 text-xs transition-colors',
+                  it.key === current?.key
+                    ? 'bg-primary text-primary-foreground'
+                    : it.done
+                      ? 'bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:text-emerald-400'
+                      : it.skipped
+                        ? 'bg-muted/50 text-muted-foreground/60 line-through'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/70',
+                )}
+              >
+                {it.done ? '●' : it.skipped ? '⤓' : '○'}{' '}
+                {it.label.length > 16 ? it.label.slice(0, 15) + '…' : it.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Fullscreen viewer ──────────────────────────────────────────────── */}
+      {viewer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setViewer(null)}
+        >
+          <button
+            onClick={() => setViewer(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            title="Fechar (Esc)"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div className="flex max-h-full max-w-6xl flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            {viewer.accepts === 'video' ? (
+              <video src={viewer.url} controls autoPlay className="max-h-[85vh] w-auto rounded-lg" />
+            ) : (
+              <img src={viewer.url} alt={viewer.label} className="max-h-[85vh] w-auto rounded-lg" />
+            )}
+            {viewer.label && <p className="text-sm text-white/80">{viewer.label}</p>}
           </div>
         </div>
       )}

@@ -24,6 +24,8 @@ export interface AddRenderInput {
   generationPrompt?: string;
   generationModel?: string;
   notes?: string;
+  /** Select this render if the quadro has none yet. Upload → true; API generation → false. */
+  autoSelect?: boolean;
 }
 
 export async function addRender(
@@ -64,7 +66,8 @@ export async function addRender(
     notes: input.notes,
   };
   quadro.renders.push(render);
-  if (!quadro.selectedRenderId) quadro.selectedRenderId = render.id;
+  // Upload selects the first render; API generation never auto-selects.
+  if (input.autoSelect !== false && !quadro.selectedRenderId) quadro.selectedRenderId = render.id;
   await savePrancha(projectId, prancha);
   await cfs.commitProject(projectId, `render: prancha ${prancha.number} · quadro ${quadro.order}`);
   return render;

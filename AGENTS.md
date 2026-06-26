@@ -1,3 +1,9 @@
+Requirements:
+
+* Any interation in the UI must be fully complete in a maximum of 100ms. This doesn't count the time of external API calls, but the user must get visual feedback on this time with an appropriate spinner until the the API call receives an answer.
+
+
+
 
 <!-- BACKLOG.MD GUIDELINES START -->
 <CRITICAL_INSTRUCTION>

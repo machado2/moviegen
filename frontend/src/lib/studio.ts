@@ -10,6 +10,22 @@ export interface StudioAttachment {
   label: string;
 }
 
+/**
+ * One produced candidate for a unit — a take (shot), a render (quadro) or a
+ * variant (reference image). The Estúdio shows them as a gallery so the user
+ * generates several and picks one, instead of overwriting.
+ */
+export interface StudioCandidate {
+  id: string;
+  /** Servable URL of the candidate's media. */
+  url: string;
+  accepts: 'image' | 'video';
+  source: 'upload' | 'generated';
+  /** Image/video model id, when this came from API generation. */
+  model?: string;
+  createdAt?: string;
+}
+
 export type StudioKind = 'character' | 'location' | 'shot' | 'quadro';
 
 export interface StudioItem {
@@ -49,6 +65,14 @@ export interface StudioItem {
   apiGenerate?: (opts?: { model?: string }) => Promise<{ jobId: string } | void>;
   /** Follow an API job to completion (resolves when done, rejects on error). */
   followJob?: (jobId: string) => Promise<void>;
+  /** Currently chosen candidate (selectedTakeId / selectedRenderId / selectedVariantId). */
+  selectedCandidateId?: string | null;
+  /** All produced candidates (takes/renders/variants) for the candidate gallery. */
+  listCandidates?: () => Promise<StudioCandidate[]>;
+  /** Choose which candidate is the kept result (null clears the selection). */
+  selectCandidate?: (candidateId: string | null) => Promise<void>;
+  /** Delete a candidate. */
+  deleteCandidate?: (candidateId: string) => Promise<void>;
   /** Persist the skipped flag for this unit. */
   setSkipped: (skipped: boolean) => Promise<void>;
   /** Persist a manual queue-ordering value for this unit. */

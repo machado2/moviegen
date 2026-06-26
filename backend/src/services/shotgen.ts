@@ -5,7 +5,7 @@
 import type { JobProgress } from '@mediagen/types';
 import { getProject } from './project.js';
 import { getScene } from './scene.js';
-import { addTake, selectTake } from './take.js';
+import { addTake } from './take.js';
 import { getAiConfig } from './settings.js';
 import { generateVideoViaGateway } from './videogen.js';
 import { assertUnderCap, recordSpend } from './spend.js';
@@ -69,14 +69,15 @@ export async function startShotVideoGeneration(
       onProgress: (f, m) => handle.update(f, m),
     });
     await recordSpend(dir, spend);
-    handle.update(0.95, 'Salvando take…');
-    const take = await addTake(projectId, sceneId, shotId, {
+    handle.update(0.95, 'Salvando candidato…');
+    // Accumulate as a take without selecting it; the user picks in the Estúdio.
+    await addTake(projectId, sceneId, shotId, {
       data: mp4,
       originalName: 'generated.mp4',
       source: 'generated',
       generationPrompt: prompt,
+      autoSelect: false,
     });
-    await selectTake(projectId, sceneId, shotId, take.id);
     handle.update(1, 'Vídeo gerado');
   });
 }

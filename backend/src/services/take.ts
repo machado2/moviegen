@@ -18,6 +18,8 @@ export interface AddTakeInput {
   source: 'upload' | 'generated';
   generationPrompt?: string;
   notes?: string;
+  /** Select this take if the shot has none yet. Upload → true; API generation → false. */
+  autoSelect?: boolean;
 }
 
 export async function addTake(
@@ -56,8 +58,9 @@ export async function addTake(
     notes: input.notes,
   };
   shot.takes.push(take);
-  // First take auto-selected for convenience.
-  if (!shot.selectedTakeId) shot.selectedTakeId = take.id;
+  // Upload selects the first take for convenience; API generation never
+  // auto-selects (the user reviews candidates and picks one explicitly).
+  if (input.autoSelect !== false && !shot.selectedTakeId) shot.selectedTakeId = take.id;
   await saveScene(projectId, scene);
   await fs.commitProject(projectId, `take: cena ${scene.number} · shot ${shot.order}`);
   return take;

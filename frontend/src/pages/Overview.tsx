@@ -253,8 +253,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
           </DialogHeader>
           <div className="space-y-2 text-sm">
             <p>
-              Isso faz uma chamada de IA (uma, não em loop) e pode custar, conforme o modelo.
-              Você pode abortar enquanto roda.
+              Isso roda um agente de IA que monta a estrutura em vários passos (personagens,
+              cenas, shots) e pode custar, conforme o modelo. Você acompanha os passos ao vivo
+              e pode abortar enquanto roda.
             </p>
             <p className="text-muted-foreground">
               Modelo de parse: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{settings?.parseModel ?? '—'}</code>

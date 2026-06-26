@@ -10,7 +10,7 @@ import type { JobProgress } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
-import { parseComicsScript } from './ai.js';
+import { parseComicsScriptAgentic } from './parseAgent.js';
 import { jobQueue } from '../../jobs/queue.js';
 import { newId, slugify } from '../../lib/ids.js';
 import { badRequest, notFound } from '../../lib/errors.js';
@@ -39,18 +39,10 @@ export async function startScriptParse(projectId: string): Promise<JobProgress> 
     async (handle) => {
       handle.update(0.05, 'Lendo roteiro…');
       const markdown = await fs.readText(cfs.scriptFile(projectId));
-      handle.update(0.15, 'Conectando ao modelo…');
-      const parsed = await parseComicsScript(
-        project,
-        markdown,
-        (chars) => {
-          // Each call here is real: the model produced more output.
-          const kb = (chars / 1024).toFixed(1);
-          handle.update(0.20, `Recebendo resposta… ${kb} KB`);
-        },
-        handle.signal,
-      );
-      handle.update(0.95, 'Salvando resultado…');
+      // Agentic parse: the model builds the structure via tool calls, emitting a
+      // live step per character/prancha/quadro through handle.update.
+      const parsed = await parseComicsScriptAgentic(project, markdown, handle.signal, handle.update);
+      handle.update(0.96, 'Salvando resultado…');
       await fs.writeNickel(cfs.parsedScriptFile(projectId), parsed);
     },
     parseJobRef(projectId),

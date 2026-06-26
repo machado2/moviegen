@@ -36,6 +36,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [confirmParse, setConfirmParse] = useState(false);
   const [aborting, setAborting] = useState(false);
+  const [parseLog, setParseLog] = useState<string[]>([]);
   const { settings } = useSettings();
 
   // Apply a finished parse automatically and commit it (git history is the
@@ -61,6 +62,10 @@ export function Overview({ project, onChanged }: OverviewProps) {
         jobId,
         (p) => {
           setParseJob(p);
+          // Accumulate each distinct agent step into a live log.
+          if (p.message) {
+            setParseLog((prev) => (prev[prev.length - 1] === p.message ? prev : [...prev, p.message]));
+          }
           if (p.status === 'done') {
             setParsing(false);
             void comicsApi.script
@@ -129,6 +134,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
     setParsing(true);
     setParseError(null);
     setParseJob(null);
+    setParseLog([]);
     try {
       const { jobId } = await comicsApi.script.parse(project.id);
       trackParse(jobId);
@@ -223,6 +229,13 @@ export function Overview({ project, onChanged }: OverviewProps) {
                   <X className="h-3.5 w-3.5" /> {aborting ? 'Abortando…' : 'Abortar'}
                 </Button>
               </div>
+              {parseLog.length > 0 && (
+                <ul className="mt-1 max-h-48 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                  {parseLog.slice(-40).map((line, i) => (
+                    <li key={`${i}-${line}`}>· {line}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {parseError && <p className="text-sm text-destructive">{parseError}</p>}
@@ -239,8 +252,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
           </DialogHeader>
           <div className="space-y-2 text-sm">
             <p>
-              Isso faz uma chamada de IA (uma, não em loop) e pode custar, conforme o modelo.
-              Você pode abortar enquanto roda.
+              Isso roda um agente de IA que monta a estrutura em vários passos (personagens,
+              pranchas, quadros) e pode custar, conforme o modelo. Você acompanha os passos ao
+              vivo e pode abortar enquanto roda.
             </p>
             <p className="text-muted-foreground">
               Modelo de parse: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{settings?.parseModel ?? '—'}</code>

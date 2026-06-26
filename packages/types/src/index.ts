@@ -250,6 +250,8 @@ export interface JobProgress {
     | 'prancha-assembly'
     | 'book-assembly'
     | 'render-generate'
+    | 'image-generate'
+    | 'video-generate'
     | 'script-parse';
   status: JobStatus;
   progress: number;          // 0..1
@@ -296,8 +298,12 @@ export interface AppSettingsDTO {
   ttsModel: string;
   /** Spend ceiling in USD that pauses API-mode generation when a project reaches it. Null = no cap. */
   spendCapUsd: number | null;
+  /** Curated text/LLM model ids (e.g. "google/gemini-2.5-pro") used for parse/co-creation; first = default. */
+  llmModels: string[];
   /** Image-generation model ids the gateway can route (e.g. "gpt-image-1"); user-chosen per generation. */
   imageModels: string[];
+  /** Video-generation model ids the gateway can route (e.g. "gemini/veo-3.0-generate-preview"); user-chosen per generation. */
+  videoModels: string[];
 }
 
 // ─── Spend tracking ─────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   type CreateShotInput,
   type UpdateShotInput,
 } from '../services/scene.js';
+import { startShotVideoGeneration } from '../services/shotgen.js';
 import { badRequest } from '../lib/errors.js';
 
 export async function shotRoutes(app: FastifyInstance): Promise<void> {
@@ -39,4 +40,19 @@ export async function shotRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  // Generate the shot's video clip via the LiteLLM gateway (Veo). Returns a job
+  // id; runs async (create → poll → download), saving the result as a take.
+  app.post<{
+    Params: { id: string; sceneId: string; shotId: string };
+    Body: { model?: string; prompt?: string; seconds?: number; size?: string };
+  }>('/projects/:id/scenes/:sceneId/shots/:shotId/generate-video', async (req, reply) => {
+    const job = await startShotVideoGeneration(req.params.id, req.params.sceneId, req.params.shotId, {
+      model: req.body?.model,
+      prompt: req.body?.prompt,
+      seconds: req.body?.seconds,
+      size: req.body?.size,
+    });
+    return reply.code(202).send({ jobId: job.id, ...job });
+  });
 }

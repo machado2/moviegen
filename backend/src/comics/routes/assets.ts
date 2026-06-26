@@ -11,6 +11,7 @@ import {
   type CreateAssetInput,
   type UpdateAssetInput,
 } from '../services/asset.js';
+import { startCharacterImageGeneration } from '../services/assembly.js';
 import { readUpload } from '../../lib/multipart.js';
 import { badRequest } from '../../lib/errors.js';
 import * as fs from '../../storage/filesystem.js';
@@ -52,4 +53,16 @@ export async function comicsAssetRoutes(app: FastifyInstance): Promise<void> {
     reply.header('Content-Type', MIME[extname(path).toLowerCase()] ?? 'application/octet-stream');
     return reply.send(fs.createReadStream(path));
   });
+
+  // Generate a character reference image via the gateway. Returns a job id.
+  app.post<{ Params: { id: string; assetId: string }; Body: { model?: string; prompt?: string } }>(
+    '/projects/:id/assets/:assetId/generate-image',
+    async (req, reply) => {
+      const job = await startCharacterImageGeneration(req.params.id, req.params.assetId, {
+        model: req.body?.model,
+        prompt: req.body?.prompt,
+      });
+      return reply.code(202).send({ jobId: job.id, ...job });
+    },
+  );
 }

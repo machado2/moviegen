@@ -16,6 +16,7 @@ export interface GenerateModalProps {
   /** Re-fetch the source view after a result is saved/generated. */
   onRefresh: () => void | Promise<void>;
   imageModels?: string[];
+  videoModels?: string[];
   spend?: SpendDTO | null;
   fetchSpend?: () => Promise<SpendDTO>;
 }
@@ -31,6 +32,7 @@ export function GenerateModal({
   item,
   onRefresh,
   imageModels,
+  videoModels,
   spend,
   fetchSpend,
 }: GenerateModalProps) {
@@ -46,6 +48,7 @@ export function GenerateModal({
             embedded
             onRefresh={onRefresh}
             imageModels={imageModels}
+            videoModels={videoModels}
             spend={spend}
             fetchSpend={fetchSpend}
           />

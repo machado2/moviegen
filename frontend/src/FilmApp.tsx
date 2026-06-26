@@ -119,6 +119,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
               spend={spend}
               fetchSpend={fetchSpend}
               imageModels={settings?.imageModels ?? []}
+          videoModels={settings?.videoModels ?? []}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}
@@ -138,6 +139,7 @@ export function FilmApp({ projectId }: FilmAppProps) {
           item={genItem}
           onRefresh={genRefresh}
           imageModels={settings?.imageModels ?? []}
+          videoModels={settings?.videoModels ?? []}
           spend={spend}
           fetchSpend={fetchSpend}
         />

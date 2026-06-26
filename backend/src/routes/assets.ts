@@ -13,6 +13,7 @@ import {
 } from '../services/asset.js';
 import { getProject } from '../services/project.js';
 import { generateImagePrompt } from '../services/ai.js';
+import { startAssetImageGeneration } from '../services/assetgen.js';
 import { readUpload } from '../lib/multipart.js';
 import { badRequest } from '../lib/errors.js';
 import * as fs from '../storage/filesystem.js';
@@ -82,6 +83,19 @@ export async function assetRoutes(app: FastifyInstance): Promise<void> {
       }
       // Voice/audio generation would call a TTS API; not wired in v1.
       throw badRequest('Direct generation for this asset type is not available in v1; upload a file instead');
+    },
+  );
+
+  // Generate the reference image itself via the LiteLLM gateway. Returns a job
+  // id; runs async (the result is saved as the asset's file).
+  app.post<{ Params: { id: string; assetId: string }; Body: { model?: string; prompt?: string } }>(
+    '/projects/:id/assets/:assetId/generate-image',
+    async (req, reply) => {
+      const job = await startAssetImageGeneration(req.params.id, req.params.assetId, {
+        model: req.body?.model,
+        prompt: req.body?.prompt,
+      });
+      return reply.code(202).send({ jobId: job.id, ...job });
     },
   );
 }

@@ -14,7 +14,9 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
       parseModel?: string | null;
       ttsModel?: string | null;
       spendCapUsd?: number | null;
+      llmModels?: string[] | null;
       imageModels?: string[] | null;
+      videoModels?: string[] | null;
     };
   }>('/settings', async (req) => {
     return updateSettings(req.body ?? {});

@@ -9,6 +9,7 @@ import type {
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject } from './project.js';
+import { getAsset, uploadAssetFile } from './asset.js';
 import { getPrancha, listPranchaRefs } from './prancha.js';
 import { addRender } from './render.js';
 import { buildQuadroPrompt, promptAttachmentIds } from './prompt.js';
@@ -224,5 +225,59 @@ export async function startRenderGeneration(
       generationModel: model,
     });
     handle.update(1, 'Render gerado');
+  });
+}
+
+export interface CharacterImageGenerationOptions {
+  /** Image model id to route through the gateway. Defaults to the first configured one. */
+  model?: string;
+  /** The copy-paste-ready prompt built by the Estúdio; falls back to a template. */
+  prompt?: string;
+}
+
+/** A self-contained character-sheet prompt, used only when the client sends none. */
+function fallbackCharacterPrompt(title: string, name: string, description?: string, style?: string): string {
+  return [
+    `Folha de referência de personagem para a graphic novel "${title}".`,
+    `Personagem: ${name}.`,
+    description ? `Descrição: ${description}.` : '',
+    style ? `Estilo visual: ${style}.` : '',
+    'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+/** Generate a character reference image via the gateway, saved as the asset file. */
+export async function startCharacterImageGeneration(
+  projectId: string,
+  assetId: string,
+  opts: CharacterImageGenerationOptions = {},
+): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  const asset = await getAsset(projectId, assetId);
+
+  const name = asset.characterName || assetId;
+  const prompt =
+    opts.prompt?.trim() ||
+    fallbackCharacterPrompt(project.title, name, asset.characterDescription, project.globalStyle);
+
+  const { apiKey, spendCapUsd, imageModels } = await getAiConfig();
+  const model = opts.model || imageModels[0];
+  if (!model) {
+    throw badRequest(
+      'Nenhum modelo de imagem configurado. Adicione um id de modelo (ex.: gpt-image-1) em Configurações.',
+    );
+  }
+  const dir = cfs.projectDir(projectId);
+  await assertUnderCap(dir, spendCapUsd);
+
+  return jobQueue.start('image-generate', async (handle) => {
+    handle.update(0.1, `Gerando personagem via ${model}…`);
+    const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt });
+    await recordSpend(dir, spend);
+    handle.update(0.85, 'Salvando imagem…');
+    await uploadAssetFile(projectId, assetId, png, `${assetId}.png`);
+    handle.update(1, 'Personagem gerado');
   });
 }

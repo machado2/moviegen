@@ -11,13 +11,94 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ModelCombobox } from '@/components/ModelCombobox';
+import { ModelCombobox, type ModelPurposeExt } from '@/components/ModelCombobox';
 import { useSettings } from '@/hooks/useSettings';
 import { api, ApiClientError } from '@/api/client';
 
 interface SettingsPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+// Video models aren't in the OpenRouter catalog; suggest the known gateway-routed
+// ids (verified available on the Gemini key — newest first, "fast" = cheaper).
+const VIDEO_SUGGESTIONS = [
+  'gemini/veo-3.1-generate-preview',
+  'gemini/veo-3.1-fast-generate-preview',
+  'gemini/veo-3.0-generate-001',
+  'gemini/veo-3.0-fast-generate-001',
+  'gemini/veo-2.0-generate-001',
+];
+
+/**
+ * A curated model shortlist: removable chips (first = default) plus a searchable
+ * combobox to add ids. Saves on every change. Keeps the giant catalog out of the
+ * per-use selectors elsewhere — those only show the shortlist.
+ */
+function ModelShortlist({
+  label,
+  hint,
+  models,
+  purpose,
+  catalog,
+  knownIds,
+  placeholder,
+  onSave,
+}: {
+  label: string;
+  hint: string;
+  models: string[];
+  purpose: ModelPurposeExt;
+  catalog: ModelCatalogEntry[];
+  knownIds?: string[];
+  placeholder?: string;
+  onSave: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    const m = draft.trim();
+    setDraft('');
+    if (!m || models.includes(m)) return;
+    onSave([...models, m]);
+  };
+  const remove = (m: string) => onSave(models.filter((x) => x !== m));
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {models.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5">
+          {models.map((m, i) => (
+            <li key={m}>
+              <span className="inline-flex items-center gap-1 rounded border bg-muted/40 py-0.5 pl-2 pr-1 text-xs font-mono">
+                {i === 0 && <span className="font-sans text-[10px] text-primary" title="padrão">padrão</span>}
+                {m}
+                <button type="button" onClick={() => remove(m)} className="rounded p-0.5 hover:bg-muted" title="Remover">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-start gap-2">
+        <div className="flex-1">
+          <ModelCombobox
+            value={draft}
+            onChange={setDraft}
+            purpose={purpose}
+            catalog={catalog}
+            knownIds={knownIds}
+            placeholder={placeholder}
+          />
+        </div>
+        <Button variant="outline" onClick={add} disabled={!draft.trim()} className="shrink-0">
+          <Plus className="h-4 w-4" /> Adicionar
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
 }
 
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
@@ -27,8 +108,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [parseModel, setParseModel] = useState('');
   const [ttsModel, setTtsModel] = useState('');
   const [spendCap, setSpendCap] = useState('');
+  const [llmModels, setLlmModels] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<string[]>([]);
-  const [imgDraft, setImgDraft] = useState('');
+  const [videoModels, setVideoModels] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +120,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       setParseModel(settings.parseModel);
       setTtsModel(settings.ttsModel);
       setSpendCap(settings.spendCapUsd != null ? String(settings.spendCapUsd) : '');
+      setLlmModels(settings.llmModels);
       setImageModels(settings.imageModels);
+      setVideoModels(settings.videoModels);
     }
   }, [settings]);
 
@@ -80,10 +164,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     setSaving(true);
     setError(null);
     try {
-      await update({
-        parseModel: parseModel.trim() || null,
-        ttsModel: ttsModel.trim() || null,
-      });
+      await update({ parseModel: parseModel.trim() || null, ttsModel: ttsModel.trim() || null });
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
@@ -91,23 +172,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   };
 
-  const saveImageModels = async (next: string[]) => {
-    setImageModels(next);
+  const saveList = async (key: 'llmModels' | 'imageModels' | 'videoModels', next: string[]) => {
+    if (key === 'llmModels') setLlmModels(next);
+    else if (key === 'imageModels') setImageModels(next);
+    else setVideoModels(next);
     setError(null);
     try {
-      await update({ imageModels: next });
+      await update({ [key]: next });
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     }
   };
-
-  const addImageModel = () => {
-    const m = imgDraft.trim();
-    setImgDraft('');
-    if (!m || imageModels.includes(m)) return;
-    void saveImageModels([...imageModels, m]);
-  };
-  const removeImageModel = (m: string) => void saveImageModels(imageModels.filter((x) => x !== m));
 
   const saveCap = async () => {
     setSaving(true);
@@ -126,9 +201,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   };
 
+  // The parse selector offers the LLM shortlist; keep the current value visible
+  // even if it isn't in the list (e.g. a default that predates the shortlist).
+  const parseOptions = Array.from(new Set([...(parseModel ? [parseModel] : []), ...llmModels]));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configurações globais</DialogTitle>
         </DialogHeader>
@@ -193,17 +272,34 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             )}
           </div>
 
+          {/* LLM shortlist + the parse/co-creation selector that draws from it. */}
+          <ModelShortlist
+            label="Modelos de LLM (texto)"
+            hint="Lista curada de modelos de texto para parse e co-criação. O primeiro é o padrão. Salva automaticamente."
+            models={llmModels}
+            purpose="text"
+            catalog={catalog}
+            placeholder="busque um modelo de texto (ex.: google/gemini-2.5-pro)"
+            onSave={(next) => void saveList('llmModels', next)}
+          />
+
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label htmlFor="parseModel">Modelo de parse</Label>
-              <ModelCombobox
-                id="parseModel"
-                value={parseModel}
-                onChange={setParseModel}
-                purpose="text"
-                catalog={catalog}
-                placeholder="busque ou cole um id (ex.: google/gemini-2.5-pro)"
-              />
+              <Label htmlFor="parseModel">Modelo de parse / co-criação</Label>
+              {parseOptions.length > 0 ? (
+                <select
+                  id="parseModel"
+                  value={parseModel}
+                  onChange={(e) => setParseModel(e.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-2 font-mono text-sm"
+                >
+                  {parseOptions.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-muted-foreground">Adicione modelos de LLM acima para escolher.</p>
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="ttsModel">Modelo de voz (TTS)</Label>
@@ -217,52 +313,30 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               />
             </div>
             <Button onClick={() => void saveModels()} disabled={saving}>
-              <Save className="h-4 w-4" /> Salvar modelos
+              <Save className="h-4 w-4" /> Salvar modelos de uso
             </Button>
           </div>
 
-          <div className="space-y-2">
-            <Label>Modelos de imagem (gateway)</Label>
-            {imageModels.length > 0 && (
-              <ul className="flex flex-wrap gap-1.5">
-                {imageModels.map((m, i) => (
-                  <li key={m}>
-                    <span className="inline-flex items-center gap-1 rounded border bg-muted/40 py-0.5 pl-2 pr-1 text-xs font-mono">
-                      {i === 0 && <span className="font-sans text-[10px] text-primary" title="padrão no Estúdio">padrão</span>}
-                      {m}
-                      <button
-                        type="button"
-                        onClick={() => removeImageModel(m)}
-                        className="rounded p-0.5 hover:bg-muted"
-                        title="Remover"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex items-start gap-2">
-              <div className="flex-1">
-                <ModelCombobox
-                  value={imgDraft}
-                  onChange={setImgDraft}
-                  purpose="image"
-                  catalog={catalog}
-                  placeholder="busque um modelo de imagem (ou cole id + params, ex.: …image-2 quality=low)"
-                />
-              </div>
-              <Button variant="outline" onClick={addImageModel} disabled={!imgDraft.trim()} className="shrink-0">
-                <Plus className="h-4 w-4" /> Adicionar
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Modelos de geração de imagem roteados pelo gateway. O Estúdio deixa escolher qual usar
-              por geração; o primeiro da lista é o padrão. Salva automaticamente. Pode adicionar
-              params depois do id (ex.: <code className="font-mono">quality=low</code>).
-            </p>
-          </div>
+          <ModelShortlist
+            label="Modelos de imagem (gateway)"
+            hint="Modelos de geração de imagem roteados pelo gateway. O Estúdio deixa escolher qual usar por geração; o primeiro é o padrão. Pode adicionar params após o id (ex.: quality=low)."
+            models={imageModels}
+            purpose="image"
+            catalog={catalog}
+            placeholder="busque um modelo de imagem (ou cole id + params)"
+            onSave={(next) => void saveList('imageModels', next)}
+          />
+
+          <ModelShortlist
+            label="Modelos de vídeo (gateway)"
+            hint="Modelos de geração de vídeo (ex.: Veo via Gemini). Não aparecem no catálogo do OpenRouter — use as sugestões ou cole o id. O Estúdio deixa escolher qual usar por geração; o primeiro é o padrão."
+            models={videoModels}
+            purpose="video"
+            catalog={catalog}
+            knownIds={VIDEO_SUGGESTIONS}
+            placeholder="ex.: gemini/veo-3.0-generate-preview"
+            onSave={(next) => void saveList('videoModels', next)}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="spendCap">Teto de gasto por projeto (US$)</Label>

@@ -11,7 +11,9 @@ interface Settings {
   parseModel?: string;
   ttsModel?: string;
   spendCapUsd?: number | null;
+  llmModels?: string[];
   imageModels?: string[];
+  videoModels?: string[];
 }
 
 /** Normalize a spend cap: a finite, non-negative number, else null (no cap). */
@@ -20,8 +22,8 @@ function normalizeCap(value: number | null | undefined): number | null {
   return value;
 }
 
-/** Clean an image-model list: trimmed, non-empty, de-duplicated, order kept. */
-function normalizeImageModels(value: string[] | null | undefined): string[] {
+/** Clean a model shortlist: trimmed, non-empty, de-duplicated, order kept (first = default). */
+function normalizeModelList(value: string[] | null | undefined): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -62,7 +64,9 @@ export async function getSettings(): Promise<AppSettingsDTO> {
     parseModel: s.parseModel || DEFAULT_PARSE_MODEL,
     ttsModel: s.ttsModel || DEFAULT_TTS_MODEL,
     spendCapUsd: normalizeCap(s.spendCapUsd),
-    imageModels: normalizeImageModels(s.imageModels),
+    llmModels: normalizeModelList(s.llmModels),
+    imageModels: normalizeModelList(s.imageModels),
+    videoModels: normalizeModelList(s.videoModels),
   };
 }
 
@@ -71,19 +75,26 @@ export async function getAiConfig(): Promise<{
   parseModel: string;
   ttsModel: string;
   spendCapUsd: number | null;
+  llmModels: string[];
   imageModels: string[];
+  videoModels: string[];
 }> {
   const s = await read();
   const apiKey = resolveApiKey(s.llmApiKey);
   if (!apiKey) {
     throw badRequest('No LLM gateway key configured. Set the LLM_API_KEY env var or add it in Settings.');
   }
+  const llmModels = normalizeModelList(s.llmModels);
+  // Parse/co-creation model: explicit choice wins, else the first curated LLM, else the default.
+  const parseModel = s.parseModel || llmModels[0] || DEFAULT_PARSE_MODEL;
   return {
     apiKey,
-    parseModel: s.parseModel || DEFAULT_PARSE_MODEL,
+    parseModel,
     ttsModel: s.ttsModel || DEFAULT_TTS_MODEL,
     spendCapUsd: normalizeCap(s.spendCapUsd),
-    imageModels: normalizeImageModels(s.imageModels),
+    llmModels,
+    imageModels: normalizeModelList(s.imageModels),
+    videoModels: normalizeModelList(s.videoModels),
   };
 }
 
@@ -97,16 +108,26 @@ export async function updateSettings(patch: {
   parseModel?: string | null;
   ttsModel?: string | null;
   spendCapUsd?: number | null;
+  llmModels?: string[] | null;
   imageModels?: string[] | null;
+  videoModels?: string[] | null;
 }): Promise<AppSettingsDTO> {
   const s = await read();
   if (patch.llmApiKey !== undefined) s.llmApiKey = patch.llmApiKey || null;
   if (patch.parseModel !== undefined) s.parseModel = patch.parseModel || undefined;
   if (patch.ttsModel !== undefined) s.ttsModel = patch.ttsModel || undefined;
   if (patch.spendCapUsd !== undefined) s.spendCapUsd = normalizeCap(patch.spendCapUsd);
+  if (patch.llmModels !== undefined) {
+    const list = normalizeModelList(patch.llmModels);
+    s.llmModels = list.length ? list : undefined;
+  }
   if (patch.imageModels !== undefined) {
-    const list = normalizeImageModels(patch.imageModels);
+    const list = normalizeModelList(patch.imageModels);
     s.imageModels = list.length ? list : undefined;
+  }
+  if (patch.videoModels !== undefined) {
+    const list = normalizeModelList(patch.videoModels);
+    s.videoModels = list.length ? list : undefined;
   }
   await fs.writeNickel(SETTINGS_FILE, s);
   return getSettings();

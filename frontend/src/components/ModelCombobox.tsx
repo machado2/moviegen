@@ -17,14 +17,18 @@ function priceLabel(m: ModelCatalogEntry): string {
   return '';
 }
 
+export type ModelPurposeExt = ModelPurpose | 'video';
+
 export interface ModelComboboxProps {
   value: string;
   onChange: (value: string) => void;
   /** Filters the catalog to models that output this modality. */
-  purpose: ModelPurpose;
+  purpose: ModelPurposeExt;
   catalog: ModelCatalogEntry[];
   placeholder?: string;
   id?: string;
+  /** Known ids to suggest even when absent from the catalog (e.g. video models). */
+  knownIds?: string[];
 }
 
 /**
@@ -32,15 +36,28 @@ export interface ModelComboboxProps {
  * take any slug, incl. params) backed by the upstream catalog for suggestions,
  * pricing and a validity hint.
  */
-export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, id }: ModelComboboxProps) {
+export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, id, knownIds }: ModelComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pool = useMemo(
-    () => catalog.filter((m) => m.outputModalities.includes(purpose)),
-    [catalog, purpose],
-  );
+  const pool = useMemo(() => {
+    const fromCatalog = catalog.filter((m) => m.outputModalities.includes(purpose));
+    if (!knownIds?.length) return fromCatalog;
+    // Suggest known ids that the upstream catalog doesn't list (e.g. video models).
+    const have = new Set(fromCatalog.map((m) => m.id));
+    const synthetic: ModelCatalogEntry[] = knownIds
+      .filter((id) => !have.has(id))
+      .map((id) => ({
+        id,
+        name: id,
+        inputModalities: ['text'],
+        outputModalities: [purpose],
+        contextLength: null,
+        pricing: { prompt: null, completion: null, image: null, request: null },
+      }));
+    return [...synthetic, ...fromCatalog];
+  }, [catalog, purpose, knownIds]);
 
   const matches = useMemo(() => {
     const raw = query.toLowerCase().trim();
@@ -54,7 +71,7 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
       .slice(0, 40);
   }, [pool, query]);
 
-  const known = !!value && catalog.some((m) => m.id === baseId(value));
+  const known = !!value && pool.some((m) => m.id === baseId(value));
 
   const choose = (mid: string) => {
     onChange(mid);

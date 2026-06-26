@@ -49,6 +49,20 @@ const FILM_REFERENCE_ROLES = new Set([
   'location',
 ]);
 
+function followFilmJob(projectId: string, jobId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    api.assembly.subscribeJob(
+      projectId,
+      jobId,
+      (p) => {
+        if (p.status === 'done') resolve();
+        else if (p.status === 'error') reject(new Error(p.error ?? 'Geração falhou'));
+      },
+      () => reject(new Error('Conexão de progresso perdida')),
+    );
+  });
+}
+
 export function useFilmStudioItems(projectId: string, onChanged: () => void): StudioQueue {
   const build = useCallback(async (): Promise<StudioItem[]> => {
     const fresh = await api.projects.get(projectId);
@@ -59,6 +73,19 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
       const done = Boolean(asset.file);
       const isLocation = asset.role === 'location';
       const name = asset.characterName ?? asset.description ?? asset.id;
+      const referencePrompt = [
+        isLocation
+          ? `Imagem de referência de cenário para o filme "${fresh.title}".`
+          : `Folha de referência de personagem para o filme "${fresh.title}".`,
+        `${isLocation ? 'Cenário' : 'Personagem'}: ${name}.`,
+        asset.description ? `Descrição: ${asset.description}.` : '',
+        fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
+        isLocation
+          ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
+          : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
+      ]
+        .filter(Boolean)
+        .join('\n');
       out.push({
         key: `asset:${asset.id}`,
         kind: isLocation ? 'location' : 'character',
@@ -79,24 +106,14 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
         setDescription: async (d) => {
           await api.assets.update(projectId, asset.id, { description: d });
         },
-        getPrompt: async () =>
-          [
-            isLocation
-              ? `Imagem de referência de cenário para o filme "${fresh.title}".`
-              : `Folha de referência de personagem para o filme "${fresh.title}".`,
-            `${isLocation ? 'Cenário' : 'Personagem'}: ${name}.`,
-            asset.description ? `Descrição: ${asset.description}.` : '',
-            fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
-            isLocation
-              ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
-              : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
-          ]
-            .filter(Boolean)
-            .join('\n'),
+        getPrompt: async () => referencePrompt,
         getAttachments: () => [],
         submit: async (file) => {
           await api.assets.upload(projectId, asset.id, file);
         },
+        apiGenerate: (opts) =>
+          api.assets.generateImage(projectId, asset.id, { model: opts?.model, prompt: referencePrompt }),
+        followJob: (jobId) => followFilmJob(projectId, jobId),
       });
     }
 
@@ -134,6 +151,12 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
           submit: async (file) => {
             await api.takes.upload(projectId, scene.id, shot.id, file);
           },
+          apiGenerate: (opts) =>
+            api.shots.generateVideo(projectId, scene.id, shot.id, {
+              model: opts?.model,
+              prompt: buildShotPrompt(fresh, scene, shot),
+            }),
+          followJob: (jobId) => followFilmJob(projectId, jobId),
         });
       }
     }
@@ -165,6 +188,15 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
     for (const asset of Object.values(fresh.assets)) {
       if (asset.role !== 'character') continue;
       const done = Boolean(asset.file);
+      const charPrompt = [
+        `Folha de referência de personagem para a graphic novel "${fresh.title}".`,
+        `Personagem: ${asset.characterName ?? asset.id}.`,
+        asset.characterDescription ? `Descrição: ${asset.characterDescription}.` : '',
+        fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
+        'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
+      ]
+        .filter(Boolean)
+        .join('\n');
       out.push({
         key: `char:${asset.id}`,
         kind: 'character',
@@ -185,20 +217,14 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
         setDescription: async (d) => {
           await comicsApi.assets.update(projectId, asset.id, { characterDescription: d });
         },
-        getPrompt: async () =>
-          [
-            `Folha de referência de personagem para a graphic novel "${fresh.title}".`,
-            `Personagem: ${asset.characterName ?? asset.id}.`,
-            asset.characterDescription ? `Descrição: ${asset.characterDescription}.` : '',
-            fresh.globalStyle ? `Estilo visual: ${fresh.globalStyle}.` : '',
-            'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
-          ]
-            .filter(Boolean)
-            .join('\n'),
+        getPrompt: async () => charPrompt,
         getAttachments: () => [],
         submit: async (file) => {
           await comicsApi.assets.upload(projectId, asset.id, file);
         },
+        apiGenerate: (opts) =>
+          comicsApi.assets.generateImage(projectId, asset.id, { model: opts?.model, prompt: charPrompt }),
+        followJob: (jobId) => followComicsJob(projectId, jobId),
       });
     }
 

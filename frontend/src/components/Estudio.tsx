@@ -42,6 +42,8 @@ export interface EstudioProps {
   fetchSpend?: () => Promise<SpendDTO>;
   /** Image-generation model ids (from Settings) the user can pick for API mode. */
   imageModels?: string[];
+  /** Video-generation model ids (from Settings) the user can pick for API mode. */
+  videoModels?: string[];
   /**
    * Embedded mode: a single-item generation workbench (used inside the
    * GenerateModal). Hides the queue rail, scope selector and queue navigation.
@@ -51,7 +53,7 @@ export interface EstudioProps {
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 60));
 
-export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend, imageModels = [], embedded = false }: EstudioProps) {
+export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey, spend: spendProp, fetchSpend, imageModels = [], videoModels = [], embedded = false }: EstudioProps) {
   const allItems = useMemo(() => orderStudioItems(rawItems), [rawItems]);
 
   // Sequence groups (scenes/pranchas) so a long queue can be produced one at a
@@ -130,16 +132,24 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
 
   // API mode
   const [apiRunning, setApiRunning] = useState(false);
-  // Image model chosen for gateway generation; default to the first configured.
+  // Image/video models chosen for gateway generation; default to the first configured.
   const [imageModel, setImageModel] = useState<string>(imageModels[0] ?? '');
   const imageModelRef = useRef(imageModel);
   useEffect(() => {
     imageModelRef.current = imageModel;
   }, [imageModel]);
-  // Keep the selection valid as the configured list changes.
+  const [videoModel, setVideoModel] = useState<string>(videoModels[0] ?? '');
+  const videoModelRef = useRef(videoModel);
+  useEffect(() => {
+    videoModelRef.current = videoModel;
+  }, [videoModel]);
+  // Keep the selections valid as the configured lists change.
   useEffect(() => {
     setImageModel((cur) => (cur && imageModels.includes(cur) ? cur : imageModels[0] ?? ''));
   }, [imageModels]);
+  useEffect(() => {
+    setVideoModel((cur) => (cur && videoModels.includes(cur) ? cur : videoModels[0] ?? ''));
+  }, [videoModels]);
   const [rateSec, setRateSec] = useState(60);
   const [countdown, setCountdown] = useState(0);
   const stopRef = useRef(false);
@@ -166,6 +176,8 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
     );
   }, [items, focusKey]);
 
+  const currentIsVideo = current?.accepts === 'video';
+  const activeModel = currentIsVideo ? videoModel : imageModel;
   const doneCount = items.filter((i) => i.done).length;
   const skippedCount = items.filter((i) => !i.done && i.skipped).length;
   const pendingCount = items.length - doneCount - skippedCount;
@@ -354,7 +366,8 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
         setBusy(true);
         const before = spendRef.current?.totalUsd ?? 0;
         try {
-          const res = await next.apiGenerate!({ model: imageModelRef.current || undefined });
+          const model = (next.accepts === 'video' ? videoModelRef.current : imageModelRef.current) || undefined;
+          const res = await next.apiGenerate!({ model });
           if (res && 'jobId' in res && next.followJob) await next.followJob(res.jobId);
           setSessionCount((c) => c + 1);
         } catch (e) {
@@ -413,12 +426,24 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {!apiRunning && apiCapable && imageModels.length > 0 && (
+          {!apiRunning && apiCapable && currentIsVideo && videoModels.length > 0 && (
+            <select
+              value={videoModel}
+              onChange={(e) => setVideoModel(e.target.value)}
+              title="Modelo de vídeo (gateway)"
+              className="h-9 max-w-[16rem] rounded-md border bg-background px-2 text-sm"
+            >
+              {videoModels.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          )}
+          {!apiRunning && apiCapable && !currentIsVideo && imageModels.length > 0 && (
             <select
               value={imageModel}
               onChange={(e) => setImageModel(e.target.value)}
               title="Modelo de imagem (gateway)"
-              className="h-9 rounded-md border bg-background px-2 text-sm"
+              className="h-9 max-w-[16rem] rounded-md border bg-background px-2 text-sm"
             >
               {imageModels.map((m) => (
                 <option key={m} value={m}>{m}</option>
@@ -426,7 +451,17 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
             </select>
           )}
           {!apiRunning && apiCapable && (
-            <Button onClick={() => void runApi()} className="gap-1" title={imageModels.length === 0 ? 'Configure um modelo de imagem em Configurações' : undefined}>
+            <Button
+              onClick={() => void runApi()}
+              className="gap-1"
+              title={
+                currentIsVideo && videoModels.length === 0
+                  ? 'Configure um modelo de vídeo em Configurações'
+                  : !currentIsVideo && imageModels.length === 0
+                    ? 'Configure um modelo de imagem em Configurações'
+                    : undefined
+              }
+            >
               <Zap className="h-4 w-4" /> Gerar com API
             </Button>
           )}
@@ -499,7 +534,7 @@ export function Estudio({ items: rawItems, onRefresh, emptyHint, initialFocusKey
             <div className="space-y-3 rounded-md border border-primary/40 bg-primary/5 p-4">
               <p className="flex items-center gap-2 text-sm font-medium">
                 <Loader2 className="h-4 w-4 animate-spin" /> Gerando: {current?.label}
-                {imageModel && <span className="font-normal text-muted-foreground">· {imageModel}</span>}
+                {activeModel && <span className="font-normal text-muted-foreground">· {activeModel}</span>}
               </p>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Limite de taxa:</span>

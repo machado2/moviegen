@@ -28,7 +28,9 @@ export interface SettingsPatch {
   parseModel?: string | null;
   ttsModel?: string | null;
   spendCapUsd?: number | null;
+  llmModels?: string[] | null;
   imageModels?: string[] | null;
+  videoModels?: string[] | null;
 }
 
 const BASE = '/api/v1';
@@ -234,6 +236,17 @@ export const assetsApi = {
       method: 'POST',
     });
   },
+  /** Generate the reference image itself via the gateway. Returns a job id. */
+  generateImage(
+    projectId: string,
+    assetId: string,
+    opts?: { model?: string; prompt?: string },
+  ): Promise<{ jobId: string }> {
+    return request(`/projects/${projectId}/assets/${assetId}/generate-image`, {
+      method: 'POST',
+      body: json(opts ?? {}),
+    });
+  },
 };
 
 // ─── Scenes ───────────────────────────────────────────────────────────────────
@@ -294,6 +307,18 @@ export const shotsApi = {
     return request(
       `/projects/${projectId}/scenes/${sceneId}/shots/${shotId}`,
       { method: 'DELETE' },
+    );
+  },
+  /** Generate the shot's video clip via the gateway (Veo). Returns a job id. */
+  generateVideo(
+    projectId: string,
+    sceneId: string,
+    shotId: string,
+    opts?: { model?: string; prompt?: string; seconds?: number; size?: string },
+  ): Promise<{ jobId: string }> {
+    return request(
+      `/projects/${projectId}/scenes/${sceneId}/shots/${shotId}/generate-video`,
+      { method: 'POST', body: json(opts ?? {}) },
     );
   },
   reorder(

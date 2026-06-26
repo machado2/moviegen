@@ -255,6 +255,17 @@ export const comicsAssetsApi = {
   fileUrl(projectId: string, assetId: string): string {
     return `${BASE}/projects/${projectId}/assets/${assetId}/file`;
   },
+  /** Generate the character reference image via the gateway. Returns a job id. */
+  generateImage(
+    projectId: string,
+    assetId: string,
+    opts?: { model?: string; prompt?: string },
+  ): Promise<{ jobId: string }> {
+    return request(`/projects/${projectId}/assets/${assetId}/generate-image`, {
+      method: 'POST',
+      body: json(opts ?? {}),
+    });
+  },
 };
 
 // ─── Pranchas ─────────────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ import { assertUnderCap, getSpend, recordSpend } from './spend.js';
 import { estimateCostUsd } from './catalog.js';
 import { makeMeteredGateway } from './gateway.js';
 import { getOutline, saveOutline, appendChatMessage } from './cocreate.js';
-import { addCharacter, listCharacters } from './character.js';
+import { addCharacter, characterContext } from './character.js';
 import { createScene, addShot, listSceneRefs, getScene } from './scene.js';
 import { getProject } from './project.js';
 import { projectDir } from '../storage/filesystem.js';
@@ -40,7 +40,7 @@ function uiText(m: UIMessage): string {
 // prompt so the model always knows what already exists without a read round-trip
 // (read tools are still offered for drilling into a specific scene).
 async function stateSummary(projectId: string, project: Project, outline: Outline): Promise<string> {
-  const chars = listCharacters(project);
+  const chars = characterContext(project);
   const scenes = await listSceneRefs(projectId);
   const acts = outline.acts
     .map((a) => {

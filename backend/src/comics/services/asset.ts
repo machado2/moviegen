@@ -3,13 +3,11 @@ import type {
   ComicsAsset,
   ComicsAssetRole,
   ComicsAssetStatus,
-  ComicsCharacter,
-  ComicsProject,
 } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
-import { newId, nowIso, slugify } from '../../lib/ids.js';
+import { newId, nowIso } from '../../lib/ids.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 
 // `asset.file` mirrors the selected variant (back-compat); legacy single-file
@@ -224,33 +222,4 @@ export async function getAssetVariantAbsolutePath(
   return { path: cfs.resolveInProject(projectId, variant.file), variant };
 }
 
-// ─── Character derivation ─────────────────────────────────────────────────────
-
-export function deriveCharacters(project: ComicsProject): ComicsCharacter[] {
-  const out: ComicsCharacter[] = [];
-  const seen = new Set<string>();
-  for (const asset of Object.values(project.assets)) {
-    if (asset.role !== 'character' || !asset.characterName) continue;
-    const id = slugify(asset.characterName);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push({
-      id,
-      name: asset.characterName,
-      description: asset.characterDescription ?? asset.description ?? '',
-      assetId: asset.id,
-    });
-  }
-  out.sort((a, b) => a.name.localeCompare(b.name));
-  return out;
-}
-
-export async function listCharacters(projectId: string): Promise<ComicsCharacter[]> {
-  return deriveCharacters(await getProject(projectId));
-}
-
-export async function getCharacter(projectId: string, charId: string): Promise<ComicsCharacter> {
-  const c = (await listCharacters(projectId)).find((x) => x.id === charId);
-  if (!c) throw notFound('Character');
-  return c;
-}
+// Character derivation lives in ./character.ts (the character read-model module).

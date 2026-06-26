@@ -231,6 +231,7 @@ Estado atual de cada responsabilidade:
 | **Criação de prompts** (texto determinístico p/ gerar imagem/vídeo) | `@mediagen/core` (`prompts/`) | ✅ consolidado — fonte única usada por front+back |
 | **Schema do formato em disco** | `@mediagen/types` | ✅ fonte única |
 | **Persistência / formato em disco** (layout de arquivos, codec Nickel, git, validação, load/save por agregado) | `storage/{filesystem,nickel,git}` + `comics/storage.ts` + `lib/validate.ts` + load/save embutido em `services/{project,scene,asset,...}` | 🔶 em progresso — paths/codec/git **e agora o esquema de nomes de arquivo** (assets/variantes, takes, renders) ficam só no storage; falta consolidar load/save por agregado e a validação. |
+| **Read-model de personagem** (derivar Character a partir dos assets) | `services/character.ts` (filme) e `comics/services/character.ts` (HQ) | ✅ extraído do `asset.ts`; resolvido o `listCharacters` duplicado (o leve virou `characterContext`) |
 | **Inferência / IA** (chamadas ao gateway) | `services/{gateway,imagegen,videogen,ai}` + agentes (`parseAgent`, `cocreateAgent`) | ✅ razoavelmente coeso |
 | **Orquestração de geração** (job: prompt + IA + persistência) | `services/{assetgen,shotgen}`, `comics/services/assembly` | ✅ |
 | **Montagem / render final** | `assembly/` (ffmpeg) e `comics/assembly/` (montagem, book) | ✅ |

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getCharacter, listCharacters } from '../services/asset.js';
+import { getCharacter, listCharacters } from '../services/character.js';
 
 export async function comicsCharacterRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { id: string } }>('/projects/:id/characters', async (req) => {

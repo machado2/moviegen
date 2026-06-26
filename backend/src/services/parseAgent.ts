@@ -15,11 +15,10 @@
 
 import type { DialogueLine, ParsedScene, ParsedScript, ParsedShot, Project } from '@mediagen/types';
 import { generateText, hasToolCall, stepCountIs, tool } from 'ai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { z } from 'zod';
-import { LLM_BASE_URL } from '../config.js';
 import { getAiConfig } from './settings.js';
 import { assertUnderCap, getSpend, recordSpend } from './spend.js';
+import { makeMeteredGateway } from './gateway.js';
 import { projectDir } from '../storage/filesystem.js';
 import { HttpError } from '../lib/errors.js';
 import { validateParsedScript } from '../lib/validate.js';
@@ -33,15 +32,6 @@ const RUN_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** Progress callback — same shape as a JobHandle.update. */
 export type StepFn = (progress: number, message: string) => void;
-
-// The gateway reports the real dollar cost of each call in this response header.
-// Parse defensively — missing/blank/non-numeric means "cost unknown", never zero.
-function parseCostHeader(headers: Headers): number | null {
-  const raw = headers.get('x-litellm-response-cost');
-  if (raw == null || raw.trim() === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
 
 interface Builder {
   result: ParsedScript;
@@ -209,44 +199,22 @@ export async function parseScriptAgentic(
   const estimate = () => Math.min(0.94, 0.15 + b.result.scenes.length * 0.02 + b.shotCount * 0.004);
   const emit = (msg: string) => onStep?.(estimate(), msg);
 
-  // Cap enforcement is best-effort and mid-loop: the gateway reports each call's
-  // cost in a response header, which we accumulate in a custom fetch. The moment
-  // prior-spend + this-run crosses the cap, we abort the whole run.
+  // Cap enforcement is best-effort and mid-loop: the metered gateway accumulates
+  // each call's cost and aborts (capSignal) the moment prior + this-run crosses
+  // the cap. See gateway.ts.
   const priorSpend = spendCapUsd != null ? (await getSpend(dir, spendCapUsd)).totalUsd : 0;
-  let runSpend = 0;
-  let capHit = false;
-  const capController = new AbortController();
-
-  const gateway = createOpenAICompatible({
-    name: 'litellm',
-    baseURL: LLM_BASE_URL,
-    apiKey,
-    headers: { 'X-Title': 'MovieGen' },
-    includeUsage: true,
-    fetch: async (input, init) => {
-      const res = await fetch(input, init);
-      const cost = parseCostHeader(res.headers);
-      if (cost != null) {
-        runSpend += cost;
-        if (spendCapUsd != null && priorSpend + runSpend >= spendCapUsd && !capHit) {
-          capHit = true;
-          capController.abort();
-        }
-      }
-      return res;
-    },
-  });
+  const gateway = makeMeteredGateway({ apiKey, priorSpend, spendCapUsd });
 
   const timeout = AbortSignal.timeout(RUN_TIMEOUT_MS);
   const combined = AbortSignal.any(
-    [signal, capController.signal, timeout].filter((s): s is AbortSignal => Boolean(s)),
+    [signal, gateway.capSignal, timeout].filter((s): s is AbortSignal => Boolean(s)),
   );
 
   let usage: { inputTokens?: number; outputTokens?: number } | undefined;
   try {
     emit('Lendo o roteiro e montando a estrutura…');
     const result = await generateText({
-      model: gateway(model),
+      model: gateway.provider(model),
       system: SYSTEM,
       prompt: `Idioma do projeto: ${project.language}\n\nRoteiro:\n\n${markdown}`,
       tools: buildTools(b, (msg) => emit(msg)),
@@ -258,10 +226,10 @@ export async function parseScriptAgentic(
   } catch (err) {
     // Distinguish *why* the run aborted so the user gets an actionable message.
     if (signal?.aborted) throw new HttpError(499, 'Cancelado');
-    if (capHit) {
+    if (gateway.capHit()) {
       throw new HttpError(
         402,
-        `Teto de gasto atingido durante o parse (≈US$ ${(priorSpend + runSpend).toFixed(4)}). Aumente o teto em Configurações ou use um modelo mais barato.`,
+        `Teto de gasto atingido durante o parse (≈US$ ${(priorSpend + gateway.runSpend()).toFixed(4)}). Aumente o teto em Configurações ou use um modelo mais barato.`,
       );
     }
     if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
@@ -270,6 +238,7 @@ export async function parseScriptAgentic(
     throw new HttpError(502, `Parse via gateway falhou: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     // Record whatever we actually spent, even on abort/timeout.
+    const runSpend = gateway.runSpend();
     if (runSpend > 0 || usage) {
       await recordSpend(dir, {
         costUsd: runSpend > 0 ? runSpend : null,

@@ -69,3 +69,25 @@ export async function getModelCatalog(): Promise<ModelCatalogEntry[]> {
     throw new HttpError(502, `Não foi possível carregar o catálogo de modelos: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
+
+/**
+ * Estimate the USD cost of a completion from catalog pricing. Needed for
+ * streaming responses, where the gateway can't report the real cost in a
+ * response header (headers flush before the body completes). Best-effort:
+ * returns null when the model isn't in the catalog or pricing is unknown.
+ */
+export async function estimateCostUsd(
+  model: string,
+  inputTokens?: number,
+  outputTokens?: number,
+): Promise<number | null> {
+  if (!inputTokens && !outputTokens) return null;
+  try {
+    const entry = (await getModelCatalog()).find((e) => e.id === model);
+    if (!entry) return null;
+    const cost = (inputTokens ?? 0) * (entry.pricing.prompt ?? 0) + (outputTokens ?? 0) * (entry.pricing.completion ?? 0);
+    return cost > 0 ? cost : null;
+  } catch {
+    return null;
+  }
+}

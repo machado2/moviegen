@@ -1,6 +1,29 @@
-import type { ComicsProject, Prancha, Quadro, QuadroText } from '@mediagen/types';
+// Prompt construction for the comics format (ComicsGen / graphic novels).
 
-function formatText(t: QuadroText): string {
+import type { ComicsAsset, ComicsProject, Prancha, Quadro, QuadroText } from '@mediagen/types';
+import { dot } from './text.js';
+
+/**
+ * The deterministic reference-image prompt for a comics character. Used by the
+ * Estúdio to show/seed the prompt and by the backend as the fallback when the
+ * client sends none.
+ */
+export function comicsCharacterPrompt(
+  project: Pick<ComicsProject, 'title' | 'globalStyle'>,
+  asset: Pick<ComicsAsset, 'characterName' | 'characterDescription' | 'id'>,
+): string {
+  return [
+    `Folha de referência de personagem para a graphic novel "${project.title}".`,
+    `Personagem: ${dot(asset.characterName ?? asset.id)}`,
+    asset.characterDescription ? `Descrição: ${dot(asset.characterDescription)}` : '',
+    project.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(project.globalStyle)}` : '',
+    'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function formatQuadroText(t: QuadroText): string {
   const speaker = t.speaker ?? 'personagem';
   switch (t.type) {
     case 'dialogue':
@@ -26,10 +49,10 @@ function formatText(t: QuadroText): string {
  * "Prompt Assembly" section. Assets are attached as images by the caller; here
  * only the character descriptions are inlined.
  */
-export function buildQuadroPrompt(project: ComicsProject, prancha: Prancha, quadro: Quadro): string {
+export function quadroPrompt(project: ComicsProject, prancha: Prancha, quadro: Quadro): string {
   const textLines =
     quadro.texts.length > 0
-      ? quadro.texts.map(formatText).join('\n')
+      ? quadro.texts.map(formatQuadroText).join('\n')
       : 'Nenhum texto essencial neste quadro.';
 
   const characterLines = quadro.characters
@@ -73,6 +96,6 @@ ${restrictionsBlock}`.trimEnd();
 }
 
 /** The asset ids attached as images to the generation call (characters + refs). */
-export function promptAttachmentIds(quadro: Quadro): string[] {
+export function quadroAttachmentIds(quadro: Quadro): string[] {
   return Array.from(new Set([...quadro.characters, ...quadro.refs]));
 }

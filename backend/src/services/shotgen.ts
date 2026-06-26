@@ -3,6 +3,7 @@
 // the job's progress mirrors the polling and the result is saved as a take.
 
 import type { JobProgress } from '@mediagen/types';
+import { shotPrompt } from '@mediagen/core';
 import { getProject } from './project.js';
 import { getScene } from './scene.js';
 import { addTake } from './take.js';
@@ -35,17 +36,7 @@ export async function startShotVideoGeneration(
   const shot = scene.shots.find((s) => s.id === shotId);
   if (!shot) throw notFound('Shot');
 
-  const prompt =
-    opts.prompt?.trim() ||
-    [
-      `Clipe de vídeo para o filme "${project.title}".`,
-      `Cena ${scene.number}${scene.shortTitle ? ` · ${scene.shortTitle}` : ''}, shot ${shot.order}.`,
-      shot.action ? `Ação: ${shot.action}.` : '',
-      shot.camera ? `Câmera: ${shot.camera}.` : '',
-      project.globalStyle ? `Estilo visual: ${project.globalStyle}.` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+  const prompt = opts.prompt?.trim() || shotPrompt(project, scene, shot);
 
   const { apiKey, spendCapUsd, videoModels } = await getAiConfig();
   const model = opts.model || videoModels[0];

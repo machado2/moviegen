@@ -1,12 +1,41 @@
+// Prompt construction for the film format (MovieGen).
+
 import type { Asset, AssetRef, Project, Scene, Shot } from '@mediagen/types';
+import { dot } from './text.js';
+
+/**
+ * The deterministic reference-image prompt for a film character or location.
+ * Used by the Estúdio to show/seed the prompt and by the backend as the fallback
+ * when the client sends none. (An optional LLM pass — see the backend's
+ * generateImagePrompt — can rewrite this into a cleaner, distilled version.)
+ */
+export function filmReferencePrompt(
+  project: Pick<Project, 'title' | 'globalStyle'>,
+  asset: Pick<Asset, 'role' | 'characterName' | 'description' | 'id'>,
+): string {
+  const isLocation = asset.role === 'location';
+  const name = asset.characterName ?? asset.description ?? asset.id;
+  return [
+    isLocation
+      ? `Imagem de referência de cenário para o filme "${project.title}".`
+      : `Folha de referência de personagem para o filme "${project.title}".`,
+    `${isLocation ? 'Cenário' : 'Personagem'}: ${dot(name)}`,
+    asset.description ? `Descrição: ${dot(asset.description)}` : '',
+    project.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(project.globalStyle)}` : '',
+    isLocation
+      ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
+      : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
 /**
  * Assemble a full text prompt for a shot, combining the global style,
- * scene-level references, shot-level references, action, dialogue and sounds.
- * Used by the "Generate Prompt" action so the user can paste it into a
- * video-generation tool.
+ * scene/shot references, action, dialogue and sounds — ready to paste into a
+ * video-generation tool or send to the gateway.
  */
-export function buildShotPrompt(
+export function shotPrompt(
   project: Pick<Project, 'globalStyle' | 'assets' | 'restrictions'>,
   scene: Pick<Scene, 'slugTitle' | 'shortTitle' | 'summary' | 'refs'>,
   shot: Shot,
@@ -18,8 +47,7 @@ export function buildShotPrompt(
   }
 
   lines.push(
-    `# Scene\n${scene.slugTitle || scene.shortTitle}` +
-      (scene.summary ? `\n${scene.summary}` : ''),
+    `# Scene\n${scene.slugTitle || scene.shortTitle}` + (scene.summary ? `\n${scene.summary}` : ''),
   );
 
   const refLabel = (ref: AssetRef): string => {
@@ -49,9 +77,7 @@ export function buildShotPrompt(
   }
 
   if (shot.diegeticTexts.length) {
-    lines.push(
-      `# On-screen Text\n${shot.diegeticTexts.map((t) => `- ${t}`).join('\n')}`,
-    );
+    lines.push(`# On-screen Text\n${shot.diegeticTexts.map((t) => `- ${t}`).join('\n')}`);
   }
 
   if (shot.lines.length) {
@@ -71,11 +97,7 @@ export function buildShotPrompt(
   lines.push(`# Duration\n${shot.targetDuration}`);
 
   if (project.restrictions.length) {
-    lines.push(
-      `# Restrictions (never do)\n${project.restrictions
-        .map((r) => `- ${r}`)
-        .join('\n')}`,
-    );
+    lines.push(`# Restrictions (never do)\n${project.restrictions.map((r) => `- ${r}`).join('\n')}`);
   }
 
   return lines.join('\n\n');

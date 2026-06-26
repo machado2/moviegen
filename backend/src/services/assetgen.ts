@@ -4,6 +4,7 @@
 // hold an HTTP request open and the UI can follow progress over SSE.
 
 import type { JobProgress } from '@mediagen/types';
+import { filmReferencePrompt } from '@mediagen/core';
 import { getProject } from './project.js';
 import { addAssetVariant, getAsset } from './asset.js';
 import { getAiConfig } from './settings.js';
@@ -20,22 +21,6 @@ export interface AssetImageGenerationOptions {
   prompt?: string;
 }
 
-/** A self-contained reference prompt, used only when the client sends none. */
-function fallbackPrompt(title: string, isLocation: boolean, subject: string, style?: string): string {
-  return [
-    isLocation
-      ? `Imagem de referência de cenário para o filme "${title}".`
-      : `Folha de referência de personagem para o filme "${title}".`,
-    `${isLocation ? 'Cenário' : 'Personagem'}: ${subject}.`,
-    style ? `Estilo visual: ${style}.` : '',
-    isLocation
-      ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
-      : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
 export async function startAssetImageGeneration(
   projectId: string,
   assetId: string,
@@ -47,9 +32,7 @@ export async function startAssetImageGeneration(
     throw badRequest('Só assets de imagem podem ser gerados por API; envie um arquivo para os demais.');
   }
 
-  const isLocation = asset.role === 'location';
-  const subject = asset.characterName || asset.description || asset.id;
-  const prompt = opts.prompt?.trim() || fallbackPrompt(project.title, isLocation, subject, project.globalStyle);
+  const prompt = opts.prompt?.trim() || filmReferencePrompt(project, asset);
 
   const { apiKey, spendCapUsd, imageModels } = await getAiConfig();
   const model = opts.model || imageModels[0];

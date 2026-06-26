@@ -23,6 +23,7 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/types/package.json packages/types/
+COPY packages/core/package.json packages/core/
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 # --frozen-lockfile: install exactly what the lockfile pins, never resolve anew.
@@ -36,6 +37,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/types/package.json ./packages/types/package.json
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
+COPY --from=builder /app/packages/core/package.json ./packages/core/package.json
+COPY --from=builder /app/packages/core/dist ./packages/core/dist
 
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -12,7 +12,7 @@ import { getProject } from './project.js';
 import { addAssetVariant, getAsset } from './asset.js';
 import { getPrancha, listPranchaRefs } from './prancha.js';
 import { addRender } from './render.js';
-import { buildQuadroPrompt, promptAttachmentIds } from './prompt.js';
+import { comicsCharacterPrompt, quadroAttachmentIds, quadroPrompt } from '@mediagen/core';
 import { generateFrame } from './ai.js';
 import { generateImageViaGateway } from '../../services/imagegen.js';
 import { getAiConfig } from '../../services/settings.js';
@@ -176,9 +176,9 @@ export async function startRenderGeneration(
   const quadro = prancha.quadros.find((q) => q.id === quadroId);
   if (!quadro) throw notFound('Quadro');
 
-  const prompt = buildQuadroPrompt(project, prancha, quadro);
+  const prompt = quadroPrompt(project, prancha, quadro);
   const attachmentPaths: string[] = [];
-  for (const assetId of promptAttachmentIds(quadro)) {
+  for (const assetId of quadroAttachmentIds(quadro)) {
     const asset = project.assets[assetId];
     if (asset?.file) attachmentPaths.push(cfs.resolveInProject(projectId, asset.file));
   }
@@ -237,19 +237,6 @@ export interface CharacterImageGenerationOptions {
   prompt?: string;
 }
 
-/** A self-contained character-sheet prompt, used only when the client sends none. */
-function fallbackCharacterPrompt(title: string, name: string, description?: string, style?: string): string {
-  return [
-    `Folha de referência de personagem para a graphic novel "${title}".`,
-    `Personagem: ${name}.`,
-    description ? `Descrição: ${description}.` : '',
-    style ? `Estilo visual: ${style}.` : '',
-    'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
-  ]
-    .filter(Boolean)
-    .join('\n');
-}
-
 /** Generate a character reference image via the gateway, saved as the asset file. */
 export async function startCharacterImageGeneration(
   projectId: string,
@@ -259,10 +246,7 @@ export async function startCharacterImageGeneration(
   const project = await getProject(projectId);
   const asset = await getAsset(projectId, assetId);
 
-  const name = asset.characterName || assetId;
-  const prompt =
-    opts.prompt?.trim() ||
-    fallbackCharacterPrompt(project.title, name, asset.characterDescription, project.globalStyle);
+  const prompt = opts.prompt?.trim() || comicsCharacterPrompt(project, asset);
 
   const { apiKey, spendCapUsd, imageModels } = await getAiConfig();
   const model = opts.model || imageModels[0];

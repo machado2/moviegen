@@ -5,16 +5,17 @@
   "type": "module",
   "packageManager": "pnpm@10.20.0",
   "scripts": {
-    "build": "pnpm --filter @mediagen/types build && pnpm --filter @mediagen/backend build && pnpm --filter @mediagen/frontend build",
+    "build": "pnpm --filter @mediagen/types build && pnpm --filter @mediagen/core build && pnpm --filter @mediagen/backend build && pnpm --filter @mediagen/frontend build",
     "dev:backend": "pnpm --filter @mediagen/backend dev",
     "dev:frontend": "pnpm --filter @mediagen/frontend dev",
-    "typecheck": "pnpm --filter @mediagen/types typecheck && pnpm --filter @mediagen/backend typecheck && pnpm --filter @mediagen/frontend typecheck",
+    "typecheck": "pnpm --filter @mediagen/types typecheck && pnpm --filter @mediagen/core typecheck && pnpm --filter @mediagen/backend typecheck && pnpm --filter @mediagen/frontend typecheck",
     "start": "node dist/server.js"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@mediagen/types": "workspace:*"
+    "@mediagen/types": "workspace:*",
+    "@mediagen/core": "workspace:*"
   }
 }

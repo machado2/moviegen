@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Prancha, Scene } from '@mediagen/types';
 import { api } from '@/api/client';
 import { comicsApi } from '@/api/comicsClient';
-import { buildShotPrompt } from '@/lib/prompt';
+import { comicsCharacterPrompt, filmReferencePrompt, shotPrompt } from '@mediagen/core';
 import type { StudioAttachment, StudioItem } from '@/lib/studio';
 
 export interface StudioQueue {
@@ -42,12 +42,6 @@ function useQueue(build: () => Promise<StudioItem[]>, onChanged: () => void): St
   return { items, loading, reload };
 }
 
-/** Append a period only when the text doesn't already end with terminal punctuation. */
-function dot(s: string): string {
-  const t = s.trim();
-  return /[.!?…:]$/.test(t) ? t : `${t}.`;
-}
-
 const FILM_REFERENCE_ROLES = new Set([
   'character-concept',
   'character-face',
@@ -79,19 +73,7 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
       const done = Boolean(asset.file);
       const isLocation = asset.role === 'location';
       const name = asset.characterName ?? asset.description ?? asset.id;
-      const referencePrompt = [
-        isLocation
-          ? `Imagem de referência de cenário para o filme "${fresh.title}".`
-          : `Folha de referência de personagem para o filme "${fresh.title}".`,
-        `${isLocation ? 'Cenário' : 'Personagem'}: ${dot(name)}`,
-        asset.description ? `Descrição: ${dot(asset.description)}` : '',
-        fresh.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(fresh.globalStyle)}` : '',
-        isLocation
-          ? 'Gere uma imagem ampla e limpa do local, sem personagens.'
-          : 'Gere uma referência limpa: fundo neutro, corpo inteiro e um close do rosto.',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const referencePrompt = filmReferencePrompt(fresh, asset);
       out.push({
         key: `asset:${asset.id}`,
         kind: isLocation ? 'location' : 'character',
@@ -169,7 +151,7 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
           setPriority: async (p) => {
             await api.shots.update(projectId, scene.id, shot.id, { queuePriority: p });
           },
-          getPrompt: async () => buildShotPrompt(fresh, scene, shot),
+          getPrompt: async () => shotPrompt(fresh, scene, shot),
           getAttachments: (): StudioAttachment[] => {
             const att: StudioAttachment[] = [];
             for (const ref of [...scene.refs, ...shot.refs]) {
@@ -184,7 +166,7 @@ export function useFilmStudioItems(projectId: string, onChanged: () => void): St
           apiGenerate: (opts) =>
             api.shots.generateVideo(projectId, scene.id, shot.id, {
               model: opts?.model,
-              prompt: buildShotPrompt(fresh, scene, shot),
+              prompt: shotPrompt(fresh, scene, shot),
             }),
           followJob: (jobId) => followFilmJob(projectId, jobId),
           selectedCandidateId: shot.selectedTakeId,
@@ -233,15 +215,7 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
     for (const asset of Object.values(fresh.assets)) {
       if (asset.role !== 'character') continue;
       const done = Boolean(asset.file);
-      const charPrompt = [
-        `Folha de referência de personagem para a graphic novel "${fresh.title}".`,
-        `Personagem: ${dot(asset.characterName ?? asset.id)}`,
-        asset.characterDescription ? `Descrição: ${dot(asset.characterDescription)}` : '',
-        fresh.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(fresh.globalStyle)}` : '',
-        'Gere uma imagem de referência limpa: fundo neutro, corpo inteiro e um close do rosto, iluminação uniforme.',
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const charPrompt = comicsCharacterPrompt(fresh, asset);
       out.push({
         key: `char:${asset.id}`,
         kind: 'character',

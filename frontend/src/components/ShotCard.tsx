@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { TakePlayer } from '@/components/TakePlayer';
-import { buildShotPrompt } from '@/lib/prompt';
+import { shotPrompt } from '@mediagen/core';
 import { api } from '@/api/client';
 
 export interface ShotCardProps {
@@ -38,7 +38,7 @@ export function ShotCard({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const generatePrompt = () => {
-    setPrompt(buildShotPrompt(project, scene, shot));
+    setPrompt(shotPrompt(project, scene, shot));
     setPromptOpen(true);
   };
 

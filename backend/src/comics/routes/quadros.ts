@@ -7,7 +7,7 @@ import {
   type CreateQuadroInput,
   type UpdateQuadroInput,
 } from '../services/prancha.js';
-import { buildQuadroPrompt } from '../services/prompt.js';
+import { quadroPrompt } from '@mediagen/core';
 import { getProject } from '../services/project.js';
 import { getPrancha } from '../services/prancha.js';
 import { badRequest, notFound } from '../../lib/errors.js';
@@ -52,7 +52,7 @@ export async function comicsQuadroRoutes(app: FastifyInstance): Promise<void> {
       const prancha = await getPrancha(req.params.id, req.params.pranchaId);
       const quadro = prancha.quadros.find((q) => q.id === req.params.quadroId);
       if (!quadro) throw notFound('Quadro');
-      return { prompt: buildQuadroPrompt(project, prancha, quadro) };
+      return { prompt: quadroPrompt(project, prancha, quadro) };
     },
   );
 }

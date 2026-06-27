@@ -25,8 +25,7 @@ import { ElencoCenarios } from '@/components/ElencoCenarios';
 import { Storyboard } from '@/components/Storyboard';
 import { Pipeline } from '@/components/Pipeline';
 import { History } from '@/components/History';
-import { GenerateModal } from '@/components/GenerateModal';
-import { ProjectShell, type NavItem } from '@/components/ProjectShell';
+import { ProjectShell, type NavGroup } from '@/components/ProjectShell';
 import type { StudioItem } from '@/lib/studio';
 import { api } from '@/api/client';
 
@@ -43,27 +42,57 @@ type Tab =
   | 'history';
 
 const ic = 'h-4 w-4';
-const NAV: NavItem[] = [
-  { id: 'pipeline', label: 'Pipeline', icon: <LayoutDashboard className={ic} /> },
-  { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
-  { id: 'cocreate', label: 'Co-criar', icon: <MessagesSquare className={ic} /> },
-  { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
-  { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
-  { id: 'characters', label: 'Elenco', icon: <Users className={ic} /> },
-  { id: 'assets', label: 'Assets', icon: <ImageIcon className={ic} /> },
-  { id: 'scenes', label: 'Cenas', icon: <Film className={ic} /> },
-  { id: 'assembly', label: 'Montagem', icon: <Clapperboard className={ic} /> },
-  { id: 'history', label: 'Histórico', icon: <HistoryIcon className={ic} /> },
+const NAV: NavGroup[] = [
+  { items: [{ id: 'pipeline', label: 'Pipeline', icon: <LayoutDashboard className={ic} /> }] },
+  {
+    label: 'História',
+    items: [
+      { id: 'overview', label: 'Projeto', icon: <Settings2 className={ic} /> },
+      { id: 'cocreate', label: 'Co-criar', icon: <MessagesSquare className={ic} /> },
+    ],
+  },
+  {
+    label: 'Produção',
+    items: [
+      { id: 'studio', label: 'Estúdio', icon: <Wand2 className={ic} /> },
+      { id: 'storyboard', label: 'Storyboard', icon: <LayoutGrid className={ic} /> },
+      { id: 'characters', label: 'Elenco', icon: <Users className={ic} /> },
+      { id: 'assets', label: 'Assets', icon: <ImageIcon className={ic} /> },
+      { id: 'scenes', label: 'Cenas', icon: <Film className={ic} /> },
+    ],
+  },
+  { label: 'Finalização', items: [{ id: 'assembly', label: 'Montagem', icon: <Clapperboard className={ic} /> }] },
+  { label: 'Geral', items: [{ id: 'history', label: 'Histórico', icon: <HistoryIcon className={ic} /> }] },
 ];
 
 interface FilmAppProps {
   projectId: string;
+  tab: string;
+  onTabChange: (tab: string) => void;
+  onProjectTitle?: (title: string | null) => void;
 }
 
-export function FilmApp({ projectId }: FilmAppProps) {
-  const [tab, setTab] = useState<Tab>('pipeline');
-  // The unit currently open in the generation modal (from Storyboard/Elenco).
-  const [genItem, setGenItem] = useState<StudioItem | null>(null);
+export function FilmApp({ projectId, tab: tabProp, onTabChange, onProjectTitle }: FilmAppProps) {
+  const tab = tabProp as Tab;
+  // The Estúdio is the single canonical generation surface: Storyboard/Elenco
+  // "open in Estúdio" focused on a unit instead of a separate modal generator.
+  const [studioFocus, setStudioFocus] = useState<string | null>(null);
+  const openInStudio = useCallback(
+    (item: StudioItem) => {
+      setStudioFocus(item.key);
+      onTabChange('studio');
+    },
+    [onTabChange],
+  );
+  // Clearing focus on a direct rail click keeps a later plain "Estúdio" visit
+  // from re-focusing a stale unit.
+  const navigate = useCallback(
+    (id: string) => {
+      setStudioFocus(null);
+      onTabChange(id);
+    },
+    [onTabChange],
+  );
   const { project, reload: reloadProject } = useProject(projectId);
   const onChanged = useCallback(() => void reloadProject(), [reloadProject]);
   const loadHistory = useCallback(() => api.projects.history(projectId), [projectId]);
@@ -83,18 +112,17 @@ export function FilmApp({ projectId }: FilmAppProps) {
     void reloadQueue();
     void reloadSpend();
   }, [onChanged, reloadQueue, reloadSpend]);
-  // After a result is saved/generated in the modal, refresh queue + spend.
-  const genRefresh = useCallback(async () => {
-    await reloadQueue();
-    await reloadSpend();
-  }, [reloadQueue, reloadSpend]);
+  // Report the project title up to the header chrome.
+  useEffect(() => {
+    onProjectTitle?.(project?.title ?? null);
+  }, [project?.title, onProjectTitle]);
 
   if (!project) {
     return <p className="text-muted-foreground">Carregando projeto…</p>;
   }
 
   return (
-    <ProjectShell nav={NAV} active={tab} onNavigate={(id) => setTab(id as Tab)}>
+    <ProjectShell nav={NAV} active={tab} onNavigate={navigate}>
       <>
         {tab === 'pipeline' && (
           <Pipeline
@@ -102,9 +130,9 @@ export function FilmApp({ projectId }: FilmAppProps) {
             loading={queueLoading}
             unitLabel="Shots"
             spend={spend}
-            onGoRoteiro={() => setTab('overview')}
-            onGoStudio={() => setTab('studio')}
-            onGoMontagem={() => setTab('assembly')}
+            onGoRoteiro={() => onTabChange('overview')}
+            onGoStudio={() => onTabChange('studio')}
+            onGoMontagem={() => onTabChange('assembly')}
           />
         )}
         {tab === 'overview' && <Overview project={project} onChanged={onChanged} />}
@@ -115,17 +143,18 @@ export function FilmApp({ projectId }: FilmAppProps) {
           ) : (
             <Estudio
               items={items}
+              initialFocusKey={studioFocus ?? undefined}
               onRefresh={reloadQueue}
               spend={spend}
               fetchSpend={fetchSpend}
               imageModels={settings?.imageModels ?? []}
-          videoModels={settings?.videoModels ?? []}
+              videoModels={settings?.videoModels ?? []}
               emptyHint="Nada para produzir ainda. Carregue um roteiro e parseie com IA primeiro."
             />
           ))}
-        {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onGenerate={setGenItem} />}
+        {tab === 'storyboard' && <Storyboard items={items} loading={queueLoading} onGenerate={openInStudio} />}
         {tab === 'characters' && (
-          <ElencoCenarios items={items} loading={queueLoading} onGenerate={setGenItem} onRefresh={reloadQueue} />
+          <ElencoCenarios items={items} loading={queueLoading} onGenerate={openInStudio} onRefresh={reloadQueue} />
         )}
         {tab === 'assets' && <Assets projectId={project.id} />}
         {tab === 'scenes' && <Scenes project={project} />}
@@ -133,16 +162,6 @@ export function FilmApp({ projectId }: FilmAppProps) {
         {tab === 'history' && (
           <History load={loadHistory} restore={restoreHistory} onRestored={afterRestore} />
         )}
-        <GenerateModal
-          open={genItem != null}
-          onOpenChange={(o) => { if (!o) setGenItem(null); }}
-          item={genItem}
-          onRefresh={genRefresh}
-          imageModels={settings?.imageModels ?? []}
-          videoModels={settings?.videoModels ?? []}
-          spend={spend}
-          fetchSpend={fetchSpend}
-        />
       </>
     </ProjectShell>
   );

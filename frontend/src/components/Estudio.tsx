@@ -50,8 +50,8 @@ export interface EstudioProps {
   /** Video-generation model ids (from Settings) the user can pick for API mode. */
   videoModels?: string[];
   /**
-   * Embedded mode: a single-item generation workbench (used inside the
-   * GenerateModal). Hides the queue rail, scope selector and queue navigation.
+   * Embedded mode: a single-item generation workbench. Hides the queue rail,
+   * scope selector and queue navigation.
    */
   embedded?: boolean;
 }

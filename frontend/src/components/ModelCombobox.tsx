@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { ModelCatalogEntry } from '@mediagen/types';
 import { Input } from '@/components/ui/input';
@@ -39,7 +39,21 @@ export interface ModelComboboxProps {
 export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, id, knownIds }: ModelComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  // Index of the keyboard-highlighted option (-1 = none). Drives ArrowUp/Down +
+  // Enter selection and aria-activedescendant.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const reactId = useId();
+  const listboxId = `${id ?? 'model'}-${reactId}-listbox`;
+  const optionId = (i: number) => `${listboxId}-opt-${i}`;
+
+  useEffect(() => {
+    // Never leave a stray blur-close timer behind on unmount.
+    return () => {
+      if (blurTimer.current) clearTimeout(blurTimer.current);
+    };
+  }, []);
 
   const pool = useMemo(() => {
     const fromCatalog = catalog.filter((m) => m.outputModalities.includes(purpose));
@@ -83,6 +97,49 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
     onChange(mid);
     setQuery(mid);
     setOpen(false);
+    setActiveIndex(-1);
+  };
+
+  // Reset the highlight whenever the suggestion set changes or the popup reopens.
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [query, open]);
+
+  // Keep the highlighted option scrolled into view as the user arrows through.
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      setActiveIndex((i) => Math.min(matches.length - 1, i + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      setActiveIndex((i) => Math.max(0, i - 1));
+    } else if (e.key === 'Enter') {
+      const active = open && activeIndex >= 0 ? matches[activeIndex] : undefined;
+      if (active) {
+        e.preventDefault();
+        choose(active.id);
+      } else {
+        setOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      if (open) {
+        e.preventDefault();
+        setOpen(false);
+      }
+    }
   };
 
   return (
@@ -96,6 +153,11 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
           autoComplete="off"
           spellCheck={false}
           className="pl-7"
+          role="combobox"
+          aria-expanded={open && matches.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           onChange={(e) => {
             onChange(e.target.value);
             setQuery(e.target.value);
@@ -105,6 +167,7 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
             setQuery(value);
             setOpen(true);
           }}
+          onKeyDown={onKeyDown}
           onBlur={() => {
             blurTimer.current = setTimeout(() => setOpen(false), 120);
           }}
@@ -121,16 +184,26 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
         </p>
       )}
       {open && matches.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md">
-          {matches.map((m) => (
-            <li key={m.id}>
+        <ul
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-popover p-1 shadow-md"
+        >
+          {matches.map((m, i) => (
+            <li key={m.id} id={optionId(i)} role="option" aria-selected={i === activeIndex} data-active={i === activeIndex}>
               <button
                 type="button"
+                tabIndex={-1}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   choose(m.id);
                 }}
-                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
+                onMouseEnter={() => setActiveIndex(i)}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-accent',
+                  i === activeIndex && 'bg-accent',
+                )}
               >
                 <span className="min-w-0">
                   <span className="block truncate font-mono text-xs">{m.id}</span>

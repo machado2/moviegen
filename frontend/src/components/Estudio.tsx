@@ -23,6 +23,7 @@ import {
 import type { SpendDTO } from '@mediagen/types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { JobConnectionLostError } from '@/hooks/useStudioQueue';
 import { cn } from '@/lib/utils';
 import { formatUsd, spendLabel } from '@/lib/cost';
 import {
@@ -444,7 +445,18 @@ export function Estudio({
       const after = await refreshSpend();
       setLastItemCost(after?.hasCost && after.totalUsd > before ? after.totalUsd - before : null);
     } catch (e) {
-      setError(`Geração falhou: ${String(e instanceof Error ? e.message : e)}`);
+      if (e instanceof JobConnectionLostError) {
+        // Don't claim failure: the job is likely still running and billing.
+        setError(
+          'Conexão perdida — a geração pode ainda estar rodando no servidor. ' +
+            'Aguarde e atualize; evite gerar de novo para não cobrar em dobro.',
+        );
+        await onRefresh();
+        await reloadCandidates(itemsRef.current.find((i) => i.key === target.key) ?? target);
+        await refreshSpend();
+      } else {
+        setError(`Geração falhou: ${String(e instanceof Error ? e.message : e)}`);
+      }
     } finally {
       setGenerating(false);
       generatingRef.current = false;

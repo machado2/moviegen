@@ -5,6 +5,7 @@ import { FilmApp } from '@/FilmApp';
 import { ComicsApp } from '@/ComicsApp';
 import { ProjectList } from '@/components/ProjectList';
 import { SettingsPanel } from '@/components/SettingsPanel';
+import { useSettings } from '@/hooks/useSettings';
 
 type SelectedProject = { id: string; type: 'film' | 'comics' } | null;
 
@@ -30,6 +31,9 @@ export function App() {
   const [tab, setTab] = useState<string | null>(initial.tab);
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { settings } = useSettings();
+  // First-run gate: nothing can be parsed or generated without a gateway key.
+  const needsKey = !!settings && !settings.hasApiKey && !settings.apiKeyFromEnv;
 
   // Reflect back/forward (and manual hash edits) into state.
   useEffect(() => {
@@ -100,6 +104,15 @@ export function App() {
           <Settings className="h-5 w-5" />
         </Button>
       </header>
+
+      {needsKey && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-amber-100 px-4 py-2 text-sm text-amber-950 dark:bg-amber-950/50 dark:text-amber-100">
+          <span>Configure a chave do gateway LLM para parsear roteiros e gerar mídia.</span>
+          <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}>
+            Abrir Configurações
+          </Button>
+        </div>
+      )}
 
       <div className="p-4">
         {selected === null && <ProjectList onSelect={selectProject} />}

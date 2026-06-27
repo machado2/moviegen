@@ -41,6 +41,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
   // before re-subscribing — otherwise a parse left running leaks an EventSource.
   const parseSubRef = useRef<(() => void) | null>(null);
   const { settings } = useSettings();
+  const needsKey = !!settings && !settings.hasApiKey && !settings.apiKeyFromEnv;
 
   // Apply a finished parse automatically and commit it (git history is the
   // review mechanism — no confirmation popup), then refresh the project.
@@ -211,7 +212,7 @@ export function Overview({ project, onChanged }: OverviewProps) {
                 <Upload className="h-4 w-4" /> Carregar roteiro
               </Button>
             </ScriptUpload>
-            <Button onClick={() => setConfirmParse(true)} disabled={parsing}>
+            <Button onClick={() => setConfirmParse(true)} disabled={parsing || needsKey}>
               <Sparkles className="h-4 w-4" />
               {parsing ? 'Parseando…' : 'Parsear com IA'}
             </Button>
@@ -230,6 +231,11 @@ export function Overview({ project, onChanged }: OverviewProps) {
               <Download className="h-4 w-4" /> Exportar com mídia
             </Button>
           </div>
+          {needsKey && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Configure a chave do gateway LLM em Configurações para parsear.
+            </p>
+          )}
 
           {parsing && (
             <div className="space-y-1">

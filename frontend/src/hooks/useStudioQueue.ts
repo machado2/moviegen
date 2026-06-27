@@ -9,6 +9,18 @@ import { comicsApi } from '@/api/comicsClient';
 import { comicsCharacterPrompt, filmReferencePrompt, shotPrompt } from '@mediagen/core';
 import type { StudioAttachment, StudioItem } from '@/lib/studio';
 
+/**
+ * The SSE progress stream dropped before the job reported done/error. The job
+ * itself is very likely still running (and billing) on the server, so callers
+ * must NOT treat this as a failure — they should reconcile, not re-generate.
+ */
+export class JobConnectionLostError extends Error {
+  constructor() {
+    super('Conexão de progresso perdida — a geração pode ainda estar rodando no servidor.');
+    this.name = 'JobConnectionLostError';
+  }
+}
+
 export interface StudioQueue {
   items: StudioItem[];
   loading: boolean;
@@ -58,7 +70,7 @@ function followFilmJob(projectId: string, jobId: string): Promise<void> {
         if (p.status === 'done') resolve();
         else if (p.status === 'error') reject(new Error(p.error ?? 'Geração falhou'));
       },
-      () => reject(new Error('Conexão de progresso perdida')),
+      () => reject(new JobConnectionLostError()),
     );
   });
 }
@@ -202,7 +214,7 @@ function followComicsJob(projectId: string, jobId: string): Promise<void> {
         if (p.status === 'done') resolve();
         else if (p.status === 'error') reject(new Error(p.error ?? 'Geração falhou'));
       },
-      () => reject(new Error('Conexão de progresso perdida')),
+      () => reject(new JobConnectionLostError()),
     );
   });
 }

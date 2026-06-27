@@ -3,10 +3,10 @@ id: TASK-37
 title: >-
   Red-team UX: polimento de baixo risco (contraste, labels, chave oculta,
   hotkeys)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-27 20:39'
-updated_date: '2026-06-27 21:28'
+updated_date: '2026-06-27 22:12'
 labels:
   - redteam
   - a11y

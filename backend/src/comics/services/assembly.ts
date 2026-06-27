@@ -16,7 +16,7 @@ import { comicsCharacterPrompt, quadroAttachmentIds, quadroPrompt } from '@media
 import { generateFrame } from './ai.js';
 import { generateImageViaGateway } from '../../services/imagegen.js';
 import { getAiConfig } from '../../services/settings.js';
-import { assertUnderCap, recordSpend } from '../../services/spend.js';
+import { recordSpend, withSpendGuard } from '../../services/spend.js';
 import { montagePrancha } from '../assembly/montagem.js';
 import { buildCbz, buildPdfEpub } from '../assembly/book.js';
 import { jobQueue } from '../../jobs/queue.js';
@@ -211,12 +211,15 @@ export async function startRenderGeneration(
       'Nenhum modelo de imagem configurado. Adicione um id de modelo (ex.: gpt-image-1) em Configurações ou use a opção manual via codex.',
     );
   }
-  await assertUnderCap(dir, spendCapUsd);
-
   return jobQueue.start('render-generate', async (handle) => {
     handle.update(0.1, `Gerando quadro via ${model}…`);
-    const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt, attachmentPaths });
-    await recordSpend(dir, spend);
+    // Paid call inside the per-project spend guard: serializes concurrent
+    // generations and re-checks the cap (fail-closed) before billing.
+    const { png } = await withSpendGuard(dir, spendCapUsd, async () => {
+      const result = await generateImageViaGateway({ apiKey, model, prompt, attachmentPaths });
+      await recordSpend(dir, result.spend);
+      return result;
+    });
     handle.update(0.85, 'Salvando candidato…');
     await addRender(projectId, pranchaId, quadroId, {
       data: png,
@@ -256,12 +259,16 @@ export async function startCharacterImageGeneration(
     );
   }
   const dir = cfs.projectDir(projectId);
-  await assertUnderCap(dir, spendCapUsd);
 
   return jobQueue.start('image-generate', async (handle) => {
     handle.update(0.1, `Gerando personagem via ${model}…`);
-    const { png, spend } = await generateImageViaGateway({ apiKey, model, prompt });
-    await recordSpend(dir, spend);
+    // Paid call inside the per-project spend guard: serializes concurrent
+    // generations and re-checks the cap (fail-closed) before billing.
+    const { png } = await withSpendGuard(dir, spendCapUsd, async () => {
+      const result = await generateImageViaGateway({ apiKey, model, prompt });
+      await recordSpend(dir, result.spend);
+      return result;
+    });
     handle.update(0.85, 'Salvando candidato…');
     await addAssetVariant(projectId, assetId, {
       data: png,

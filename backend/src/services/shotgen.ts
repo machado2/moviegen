@@ -9,7 +9,7 @@ import { getScene } from './scene.js';
 import { addTake } from './take.js';
 import { getAiConfig } from './settings.js';
 import { generateVideoViaGateway } from './videogen.js';
-import { assertUnderCap, recordSpend } from './spend.js';
+import { recordSpend, withSpendGuard } from './spend.js';
 import { jobQueue } from '../jobs/queue.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { projectDir } from '../storage/filesystem.js';
@@ -46,20 +46,25 @@ export async function startShotVideoGeneration(
     );
   }
   const dir = projectDir(projectId);
-  await assertUnderCap(dir, spendCapUsd);
 
   return jobQueue.start('video-generate', async (handle) => {
     handle.update(0.05, `Gerando vídeo via ${model}…`);
-    const { mp4, spend } = await generateVideoViaGateway({
-      apiKey,
-      model,
-      prompt,
-      seconds: opts.seconds,
-      size: opts.size,
-      signal: handle.signal,
-      onProgress: (f, m) => handle.update(f, m),
+    // Run the paid call inside the per-project spend guard: it serializes
+    // concurrent generations and re-checks the cap (fail-closed) before billing,
+    // so a burst can no longer all overshoot a near-zero ledger.
+    const { mp4 } = await withSpendGuard(dir, spendCapUsd, async () => {
+      const result = await generateVideoViaGateway({
+        apiKey,
+        model,
+        prompt,
+        seconds: opts.seconds,
+        size: opts.size,
+        signal: handle.signal,
+        onProgress: (f, m) => handle.update(f, m),
+      });
+      await recordSpend(dir, result.spend);
+      return result;
     });
-    await recordSpend(dir, spend);
     handle.update(0.95, 'Salvando candidato…');
     // Accumulate as a take without selecting it; the user picks in the Estúdio.
     await addTake(projectId, sceneId, shotId, {

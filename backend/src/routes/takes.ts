@@ -22,7 +22,7 @@ export async function takeRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: ShotParams }>(
     '/projects/:id/scenes/:sceneId/shots/:shotId/takes',
     async (req, reply) => {
-      const { buffer, filename, fields } = await readUpload(req);
+      const { buffer, filename, fields } = await readUpload(req, { kind: 'video' });
       const take = await addTake(req.params.id, req.params.sceneId, req.params.shotId, {
         data: buffer,
         originalName: filename,

@@ -35,7 +35,9 @@ async function buildServer() {
 
   await app.register(cors, { origin: true });
   await app.register(multipart, {
-    limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2GB video uploads
+    // 512MB: comfortably fits a generated take/render (short clips & images run
+    // tens of MB) while capping unbounded local-disk writes. 2GB was a DoS risk.
+    limits: { fileSize: 512 * 1024 * 1024 },
   });
 
   // Accept text/markdown bodies for raw script upload.

@@ -48,7 +48,7 @@ export async function comicsAssetRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string; assetId: string } }>('/projects/:id/assets/:assetId/upload', async (req) => {
-    const { buffer, filename } = await readUpload(req);
+    const { buffer, filename } = await readUpload(req, { kind: 'image' });
     return uploadAssetFile(req.params.id, req.params.assetId, buffer, filename);
   });
 

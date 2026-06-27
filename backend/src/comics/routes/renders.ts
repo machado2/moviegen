@@ -21,7 +21,7 @@ export async function comicsRenderRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: QuadroParams }>(
     '/projects/:id/pranchas/:pranchaId/quadros/:quadroId/renders',
     async (req, reply) => {
-      const { buffer, filename, fields } = await readUpload(req);
+      const { buffer, filename, fields } = await readUpload(req, { kind: 'image' });
       const render = await addRender(req.params.id, req.params.pranchaId, req.params.quadroId, {
         data: buffer,
         originalName: filename,

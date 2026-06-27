@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ModelCatalogEntry } from '@mediagen/types';
-import { KeyRound, Plus, Save, X } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Plus, Save, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -105,6 +105,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const { settings, update, reload, error: loadError } = useSettings();
   const [apiKey, setApiKey] = useState('');
   const [editingKey, setEditingKey] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const [parseModel, setParseModel] = useState('');
   const [ttsModel, setTtsModel] = useState('');
   const [ttsDirty, setTtsDirty] = useState(false);
@@ -265,15 +266,27 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </p>
             ) : editingKey ? (
               <div className="flex gap-2">
-                <Input
-                  type="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={apiKey}
-                  placeholder={settings?.hasApiKey ? 'cole uma nova chave' : 'sk-…'}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-                <Button variant="ghost" onClick={() => { setEditingKey(false); setApiKey(''); }}>
+                <div className="relative flex-1">
+                  <Input
+                    type={showKey ? 'text' : 'password'}
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={apiKey}
+                    placeholder={settings?.hasApiKey ? 'cole uma nova chave' : 'sk-…'}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="pr-9"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey((v) => !v)}
+                    title={showKey ? 'Ocultar chave' : 'Mostrar chave'}
+                    aria-label={showKey ? 'Ocultar chave' : 'Mostrar chave'}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <Button variant="ghost" onClick={() => { setEditingKey(false); setApiKey(''); setShowKey(false); }}>
                   Cancelar
                 </Button>
               </div>

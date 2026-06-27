@@ -3,7 +3,7 @@
 // so both see exactly the same notion of "what's pending".
 
 import { useCallback, useEffect, useState } from 'react';
-import type { Prancha, Scene } from '@mediagen/types';
+import type { JobProgress, Prancha, Scene } from '@mediagen/types';
 import { api } from '@/api/client';
 import { comicsApi } from '@/api/comicsClient';
 import { comicsCharacterPrompt, filmReferencePrompt, shotPrompt } from '@mediagen/core';
@@ -19,6 +19,32 @@ export class JobConnectionLostError extends Error {
     super('Conexão de progresso perdida — a geração pode ainda estar rodando no servidor.');
     this.name = 'JobConnectionLostError';
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The SSE stream dropped before a terminal status. The job is likely still
+ * running, so poll its one-shot status a few times before giving up — resolve if
+ * it actually finished, reject with the real error if it failed, and only fall
+ * back to JobConnectionLostError if it's still unknown.
+ */
+async function reconcileAfterDrop(
+  getJob: () => Promise<JobProgress>,
+  resolve: () => void,
+  reject: (e: Error) => void,
+): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await sleep(1500);
+    try {
+      const j = await getJob();
+      if (j.status === 'done') return resolve();
+      if (j.status === 'error') return reject(new Error(j.error ?? 'Geração falhou'));
+    } catch {
+      /* keep polling */
+    }
+  }
+  reject(new JobConnectionLostError());
 }
 
 export interface StudioQueue {
@@ -70,7 +96,7 @@ function followFilmJob(projectId: string, jobId: string): Promise<void> {
         if (p.status === 'done') resolve();
         else if (p.status === 'error') reject(new Error(p.error ?? 'Geração falhou'));
       },
-      () => reject(new JobConnectionLostError()),
+      () => void reconcileAfterDrop(() => api.assembly.getJob(projectId, jobId), resolve, reject),
     );
   });
 }
@@ -214,7 +240,7 @@ function followComicsJob(projectId: string, jobId: string): Promise<void> {
         if (p.status === 'done') resolve();
         else if (p.status === 'error') reject(new Error(p.error ?? 'Geração falhou'));
       },
-      () => reject(new JobConnectionLostError()),
+      () => void reconcileAfterDrop(() => comicsApi.assembly.getJob(projectId, jobId), resolve, reject),
     );
   });
 }

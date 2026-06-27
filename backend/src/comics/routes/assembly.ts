@@ -63,6 +63,13 @@ export async function comicsAssemblyRoutes(app: FastifyInstance): Promise<void> 
     return sendFileWithRange(req, reply, path, FORMAT_MIME[req.params.format]);
   });
 
+  // ─── Job status (one-shot) — reconcile after a dropped SSE stream ─────────
+  app.get<{ Params: { id: string; jobId: string } }>('/projects/:id/jobs/:jobId', async (req) => {
+    const job = jobQueue.get(req.params.jobId);
+    if (!job) throw notFound('Job');
+    return job;
+  });
+
   // ─── Job progress (SSE) — shared in-memory queue ─────────────────────────
   app.get<{ Params: { id: string; jobId: string } }>(
     '/projects/:id/jobs/:jobId/progress',

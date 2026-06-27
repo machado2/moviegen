@@ -50,6 +50,15 @@ export async function assemblyRoutes(app: FastifyInstance): Promise<void> {
     return sendFileWithRange(req, reply, path, 'video/mp4');
   });
 
+  // ─── Job status (one-shot) ──────────────────────────────────────────────
+  // Lets the client reconcile after a dropped SSE stream (a generation may have
+  // finished/failed server-side while the live connection was gone).
+  app.get<{ Params: { id: string; jobId: string } }>('/projects/:id/jobs/:jobId', async (req) => {
+    const job = jobQueue.get(req.params.jobId);
+    if (!job) throw notFound('Job');
+    return job;
+  });
+
   // ─── Job progress (SSE) ─────────────────────────────────────────────────
   app.get<{ Params: { id: string; jobId: string } }>(
     '/projects/:id/jobs/:jobId/progress',

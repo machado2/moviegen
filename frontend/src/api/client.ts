@@ -440,6 +440,10 @@ export const assemblyApi = {
   movieOutputUrl(projectId: string): string {
     return `${BASE}/projects/${projectId}/output`;
   },
+  /** One-shot job status, to reconcile after a dropped SSE stream. */
+  getJob(projectId: string, jobId: string): Promise<JobProgress> {
+    return request(`/projects/${projectId}/jobs/${jobId}`);
+  },
   /**
    * Subscribe to SSE job progress. Returns an unsubscribe function.
    * The server streams `JobProgress` JSON payloads in each event.

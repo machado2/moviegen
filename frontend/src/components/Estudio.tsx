@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { SpendDTO } from '@mediagen/types';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { formatUsd, spendLabel } from '@/lib/cost';
 import {
@@ -199,6 +200,9 @@ export function Estudio({
   // A failed candidate listing must read as an error, not as "no candidates yet"
   // — otherwise a successful paid generation can look like it produced nothing.
   const [candError, setCandError] = useState<string | null>(null);
+  // Inline "Apagar candidato?" confirmation, keyed by candidate id (deleting paid
+  // media shouldn't be a one-click mis-tap next to "Usar esta").
+  const [confirmDelCand, setConfirmDelCand] = useState<string | null>(null);
   // Local optimistic selection so a click highlights instantly (<200ms), before
   // the server round-trip + queue refresh land.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -316,6 +320,19 @@ export function Estudio({
   const submitFile = useCallback(
     async (file: File) => {
       if (!current) return;
+      // Validate the kind up front (the backend now rejects too): fail fast with a
+      // clear message instead of a cryptic error far downstream at assembly time.
+      const wrongKind =
+        (current.accepts === 'video' && file.type && !file.type.startsWith('video/')) ||
+        (current.accepts === 'image' && file.type && !file.type.startsWith('image/'));
+      if (wrongKind) {
+        setError(
+          current.accepts === 'video'
+            ? 'Arquivo inválido: envie um arquivo de vídeo.'
+            : 'Arquivo inválido: envie um arquivo de imagem.',
+        );
+        return;
+      }
       setBusy(true);
       setError(null);
       try {
@@ -560,10 +577,7 @@ export function Estudio({
   // ─── Keyboard shortcuts ───────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (viewer && e.key === 'Escape') {
-        setViewer(null);
-        return;
-      }
+      if (viewer) return; // the fullscreen Dialog owns the keyboard (incl. Esc) while open
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
       if (e.key === 'ArrowRight') goNext();
@@ -632,6 +646,7 @@ export function Estudio({
               value={activeModel}
               onChange={(e) => (currentIsVideo ? setVideoModel(e.target.value) : setImageModel(e.target.value))}
               title={`Modelo de ${acceptsLabel} (gateway)`}
+              aria-label={`Modelo de ${acceptsLabel}`}
               disabled={generating}
               className="h-9 max-w-[15rem] rounded-md border bg-background px-2 text-sm disabled:opacity-50"
             >
@@ -923,7 +938,8 @@ export function Estudio({
                     setViewer({ url: preview.url, accepts: preview.accepts, label: current?.label ?? '' })
                   }
                   title="Ver em tela cheia"
-                  className="absolute right-2 top-2 rounded-md bg-background/80 p-1.5 opacity-0 shadow-sm backdrop-blur transition-opacity hover:bg-background group-hover:opacity-100"
+                  aria-label="Ver em tela cheia"
+                  className="absolute right-2 top-2 rounded-md bg-background/80 p-1.5 shadow-sm backdrop-blur transition-colors hover:bg-background"
                 >
                   <Expand className="h-4 w-4" />
                 </button>
@@ -999,18 +1015,22 @@ export function Estudio({
             <div className="flex gap-3 overflow-x-auto pb-1">
               {candidates.map((c) => {
                 const chosen = c.id === selectedId;
+                const confirming = confirmDelCand === c.id;
                 return (
                   <div
                     key={c.id}
                     className={cn(
-                      'group relative w-40 shrink-0 overflow-hidden rounded-lg border bg-card transition-shadow',
+                      'relative w-40 shrink-0 overflow-hidden rounded-lg border bg-card transition-shadow',
                       chosen ? 'ring-2 ring-primary' : 'hover:shadow-md',
                     )}
                   >
+                    {/* A single click/tap selects this candidate (works on touch); the
+                        fullscreen and delete actions are always-visible buttons on top. */}
                     <button
                       type="button"
-                      onClick={() => setViewer({ url: c.url, accepts: c.accepts, label: current.label })}
-                      title="Ver em tela cheia"
+                      onClick={() => chooseCandidate(c.id)}
+                      aria-pressed={chosen}
+                      title={chosen ? 'Em uso' : 'Usar este candidato'}
                       className="block aspect-square w-full bg-muted"
                     >
                       {c.accepts === 'video' ? (
@@ -1020,7 +1040,7 @@ export function Estudio({
                       )}
                     </button>
 
-                    {/* badges */}
+                    {/* badges (top-left) */}
                     <div className="pointer-events-none absolute left-1.5 top-1.5 flex gap-1">
                       {chosen && (
                         <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
@@ -1032,35 +1052,68 @@ export function Estudio({
                       </span>
                     </div>
 
-                    {/* hover actions */}
-                    <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      {chosen ? (
-                        <span className="flex flex-1 items-center justify-center gap-1 rounded bg-primary/90 px-2 py-1 text-[11px] font-medium text-primary-foreground">
-                          <Check className="h-3 w-3" /> Em uso
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => chooseCandidate(c.id)}
-                          className="flex-1 rounded bg-white/90 px-2 py-1 text-[11px] font-medium text-black hover:bg-white"
-                        >
-                          Usar esta
-                        </button>
-                      )}
+                    {/* always-visible actions (top-right) */}
+                    <div className="absolute right-1.5 top-1.5 flex gap-1">
                       <button
                         type="button"
-                        onClick={() => removeCandidate(c.id)}
+                        onClick={() => setViewer({ url: c.url, accepts: c.accepts, label: current.label })}
+                        title="Ver em tela cheia"
+                        aria-label="Ver em tela cheia"
+                        className="rounded-md bg-background/80 p-1 text-foreground shadow-sm backdrop-blur hover:bg-background"
+                      >
+                        <Expand className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelCand(c.id)}
                         title="Excluir candidato"
-                        className="rounded bg-white/90 p-1 text-destructive hover:bg-white"
+                        aria-label="Excluir candidato"
+                        className="rounded-md bg-background/80 p-1 text-destructive shadow-sm backdrop-blur hover:bg-background"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
-                    {c.model && (
-                      <p className="truncate px-1.5 py-1 text-[10px] text-muted-foreground" title={c.model}>
-                        {c.model}
-                      </p>
+                    {/* footer: selection state + model */}
+                    <div className="px-1.5 py-1">
+                      {chosen ? (
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-primary">
+                          <Check className="h-3 w-3" /> Em uso
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">Toque para usar</span>
+                      )}
+                      {c.model && (
+                        <p className="truncate text-[10px] text-muted-foreground" title={c.model}>
+                          {c.model}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* inline delete confirmation (paid media — not a one-tap delete) */}
+                    {confirming && (
+                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/95 p-2 text-center">
+                        <p className="text-[11px] font-medium">Apagar candidato?</p>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeCandidate(c.id);
+                              setConfirmDelCand(null);
+                            }}
+                            className="rounded bg-destructive px-2 py-1 text-[11px] font-medium text-destructive-foreground"
+                          >
+                            Apagar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelCand(null)}
+                            className="rounded border px-2 py-1 text-[11px]"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
@@ -1070,29 +1123,24 @@ export function Estudio({
         </div>
       )}
 
-      {/* ─── Fullscreen viewer ──────────────────────────────────────────────── */}
-      {viewer && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setViewer(null)}
-        >
-          <button
-            onClick={() => setViewer(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-            title="Fechar (Esc)"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <div className="flex max-h-full max-w-6xl flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
-            {viewer.accepts === 'video' ? (
-              <video src={viewer.url} controls autoPlay className="max-h-[85vh] w-auto rounded-lg" />
-            ) : (
-              <img src={viewer.url} alt={viewer.label} className="max-h-[85vh] w-auto rounded-lg" />
-            )}
-            {viewer.label && <p className="text-sm text-white/80">{viewer.label}</p>}
-          </div>
-        </div>
-      )}
+      {/* ─── Fullscreen viewer: accessible Dialog (focus trap + restore, Esc) ── */}
+      <Dialog open={!!viewer} onOpenChange={(o) => !o && setViewer(null)}>
+        <DialogContent className="max-w-[95vw] border-0 bg-transparent p-0 shadow-none sm:max-w-[95vw]">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{viewer?.label || 'Visualização em tela cheia'}</DialogTitle>
+          </DialogHeader>
+          {viewer && (
+            <div className="flex max-h-[88vh] flex-col items-center gap-3">
+              {viewer.accepts === 'video' ? (
+                <video src={viewer.url} controls autoPlay className="max-h-[82vh] w-auto rounded-lg" />
+              ) : (
+                <img src={viewer.url} alt={viewer.label} className="max-h-[82vh] w-auto rounded-lg" />
+              )}
+              {viewer.label && <p className="text-sm text-white/80">{viewer.label}</p>}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

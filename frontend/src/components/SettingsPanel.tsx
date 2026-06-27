@@ -160,11 +160,25 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   };
 
-  const saveModels = async () => {
+  // The parse-model picker autosaves on change (like the shortlists), so a fresh
+  // selection is persisted before the user clicks "Parsear". The parse reads the
+  // model server-side, so an unsaved selection would otherwise run with the
+  // previously-saved model.
+  const saveParseModel = async (value: string) => {
+    setParseModel(value);
+    setError(null);
+    try {
+      await update({ parseModel: value.trim() || null });
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : String(e));
+    }
+  };
+
+  const saveTts = async () => {
     setSaving(true);
     setError(null);
     try {
-      await update({ parseModel: parseModel.trim() || null, ttsModel: ttsModel.trim() || null });
+      await update({ ttsModel: ttsModel.trim() || null });
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
@@ -290,7 +304,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 <select
                   id="parseModel"
                   value={parseModel}
-                  onChange={(e) => setParseModel(e.target.value)}
+                  onChange={(e) => void saveParseModel(e.target.value)}
                   className="h-9 w-full rounded-md border bg-background px-2 font-mono text-sm"
                 >
                   {parseOptions.map((m) => (
@@ -300,6 +314,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               ) : (
                 <p className="text-xs text-muted-foreground">Adicione modelos de LLM acima para escolher.</p>
               )}
+              <p className="text-[11px] text-muted-foreground">Salva automaticamente.</p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="ttsModel">Modelo de voz (TTS)</Label>
@@ -312,8 +327,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 placeholder="busque ou cole um id (ex.: openai/gpt-4o-mini-tts)"
               />
             </div>
-            <Button onClick={() => void saveModels()} disabled={saving}>
-              <Save className="h-4 w-4" /> Salvar modelos de uso
+            <Button onClick={() => void saveTts()} disabled={saving}>
+              <Save className="h-4 w-4" /> Salvar modelo de voz
             </Button>
           </div>
 

@@ -1,9 +1,10 @@
 ---
 id: TASK-22
 title: 'Red-team UX: re-parse não destrói trabalho/mídia paga sem aviso honesto'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:37'
+updated_date: '2026-06-27 21:23'
 labels:
   - ux
   - redteam

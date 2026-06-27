@@ -3,10 +3,10 @@ id: TASK-29
 title: >-
   Red-team UX: correções de estado no Estúdio (perda de edição, double-job,
   rollback otimista)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-27 20:38'
-updated_date: '2026-06-27 20:40'
+updated_date: '2026-06-27 20:47'
 labels:
   - redteam
   - frontend

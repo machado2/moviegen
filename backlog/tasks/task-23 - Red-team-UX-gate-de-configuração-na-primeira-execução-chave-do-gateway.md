@@ -1,9 +1,10 @@
 ---
 id: TASK-23
 title: 'Red-team UX: gate de configuração na primeira execução (chave do gateway)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:37'
+updated_date: '2026-06-27 21:28'
 labels:
   - ux
   - redteam

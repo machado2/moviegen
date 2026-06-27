@@ -3,9 +3,10 @@ id: TASK-24
 title: >-
   Red-team UX: teto de gasto vira teto de verdade (estimativa + concorrência +
   fail-closed)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:37'
+updated_date: '2026-06-27 22:10'
 labels:
   - redteam
   - safety

@@ -3,9 +3,10 @@ id: TASK-32
 title: >-
   Red-team UX: repensar arquitetura de navegação (10 abas, 3 superfícies de
   geração, deep-link)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:39'
+updated_date: '2026-06-27 21:23'
 labels:
   - redteam
   - ux

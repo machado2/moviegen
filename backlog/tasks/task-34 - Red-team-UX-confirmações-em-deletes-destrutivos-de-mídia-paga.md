@@ -1,9 +1,10 @@
 ---
 id: TASK-34
 title: 'Red-team UX: confirmações em deletes destrutivos de mídia paga'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:39'
+updated_date: '2026-06-27 21:23'
 labels:
   - redteam
   - ux

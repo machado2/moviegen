@@ -1,9 +1,10 @@
 ---
 id: TASK-27
 title: 'Red-team UX: acessibilidade do seletor de modelo (teclado + leitor de tela)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:38'
+updated_date: '2026-06-27 21:12'
 labels:
   - redteam
   - a11y

@@ -1,9 +1,10 @@
 ---
 id: TASK-36
 title: 'Red-team UX: validação de upload (tipo/MIME) e limite de tamanho'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:39'
+updated_date: '2026-06-27 21:12'
 labels:
   - redteam
   - backend

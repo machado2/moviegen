@@ -1,9 +1,10 @@
 ---
 id: TASK-28
 title: 'Red-team UX: escolher/apagar candidato funciona no touch (não só hover)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:38'
+updated_date: '2026-06-27 21:12'
 labels:
   - redteam
   - a11y

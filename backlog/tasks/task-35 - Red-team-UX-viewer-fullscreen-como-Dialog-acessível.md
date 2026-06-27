@@ -1,9 +1,10 @@
 ---
 id: TASK-35
 title: 'Red-team UX: viewer fullscreen como Dialog acessível'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:39'
+updated_date: '2026-06-27 21:12'
 labels:
   - redteam
   - a11y

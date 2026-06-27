@@ -3,9 +3,10 @@ id: TASK-25
 title: >-
   Red-team UX: custo visível antes de gerar (estimativa por modelo + confirmação
   de vídeo)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 20:37'
+updated_date: '2026-06-27 22:08'
 labels:
   - ux
   - redteam

@@ -1,10 +1,10 @@
 ---
 id: TASK-30
 title: 'Red-team UX: Configurações sem perda silenciosa (TTS/teto) e sem corridas'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-27 20:38'
-updated_date: '2026-06-27 20:40'
+updated_date: '2026-06-27 20:47'
 labels:
   - redteam
   - frontend

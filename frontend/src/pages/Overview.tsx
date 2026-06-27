@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JobProgress, ParsedScript, ProjectDTO } from '@mediagen/types';
 import { Download, Save, Sparkles, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +37,9 @@ export function Overview({ project, onChanged }: OverviewProps) {
   const [confirmParse, setConfirmParse] = useState(false);
   const [aborting, setAborting] = useState(false);
   const [parseLog, setParseLog] = useState<string[]>([]);
+  // Live SSE unsubscribe, so we can tear the stream down on unmount/navigate and
+  // before re-subscribing — otherwise a parse left running leaks an EventSource.
+  const parseSubRef = useRef<(() => void) | null>(null);
   const { settings } = useSettings();
 
   // Apply a finished parse automatically and commit it (the git history is the
@@ -58,7 +61,8 @@ export function Overview({ project, onChanged }: OverviewProps) {
   // Follow a parse job over SSE; on success, fetch the result and apply it.
   const trackParse = useCallback(
     (jobId: string) => {
-      api.assembly.subscribeJob(
+      parseSubRef.current?.(); // close any previous stream before re-subscribing
+      parseSubRef.current = api.assembly.subscribeJob(
         project.id,
         jobId,
         (p) => {
@@ -112,6 +116,8 @@ export function Overview({ project, onChanged }: OverviewProps) {
     })();
     return () => {
       alive = false;
+      parseSubRef.current?.();
+      parseSubRef.current = null;
     };
   }, [project.id, trackParse, autoApply]);
 

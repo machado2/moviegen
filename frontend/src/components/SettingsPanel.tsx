@@ -102,12 +102,14 @@ function ModelShortlist({
 }
 
 export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
-  const { settings, update } = useSettings();
+  const { settings, update, reload, error: loadError } = useSettings();
   const [apiKey, setApiKey] = useState('');
   const [editingKey, setEditingKey] = useState(false);
   const [parseModel, setParseModel] = useState('');
   const [ttsModel, setTtsModel] = useState('');
+  const [ttsDirty, setTtsDirty] = useState(false);
   const [spendCap, setSpendCap] = useState('');
+  const [capDirty, setCapDirty] = useState(false);
   const [llmModels, setLlmModels] = useState<string[]>([]);
   const [imageModels, setImageModels] = useState<string[]>([]);
   const [videoModels, setVideoModels] = useState<string[]>([]);
@@ -118,13 +120,23 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   useEffect(() => {
     if (settings) {
       setParseModel(settings.parseModel);
-      setTtsModel(settings.ttsModel);
-      setSpendCap(settings.spendCapUsd != null ? String(settings.spendCapUsd) : '');
       setLlmModels(settings.llmModels);
       setImageModels(settings.imageModels);
       setVideoModels(settings.videoModels);
+      // Manual-save fields: don't overwrite unsaved edits when an autosaving field
+      // (a shortlist or the parse model) updates the shared settings store.
+      if (!ttsDirty) setTtsModel(settings.ttsModel);
+      if (!capDirty) setSpendCap(settings.spendCapUsd != null ? String(settings.spendCapUsd) : '');
     }
-  }, [settings]);
+  }, [settings, ttsDirty, capDirty]);
+
+  // Reopening the panel shows server truth: discard any unsaved manual edits.
+  useEffect(() => {
+    if (!open) {
+      setTtsDirty(false);
+      setCapDirty(false);
+    }
+  }, [open]);
 
   // Load the searchable model catalog when the panel opens (best-effort: the
   // fields stay usable as free text if the upstream catalog can't be reached).
@@ -179,6 +191,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     setError(null);
     try {
       await update({ ttsModel: ttsModel.trim() || null });
+      setTtsDirty(false);
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
@@ -208,6 +221,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         throw new Error('Informe um valor em dólares (ex.: 5) ou deixe vazio para sem teto.');
       }
       await update({ spendCapUsd: parsed });
+      setCapDirty(false);
     } catch (e) {
       setError(e instanceof ApiClientError ? e.message : String(e));
     } finally {
@@ -225,6 +239,14 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
         <DialogHeader>
           <DialogTitle>Configurações globais</DialogTitle>
         </DialogHeader>
+        {loadError && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            <span>Não foi possível carregar as configurações: {loadError}</span>
+            <Button variant="outline" size="sm" onClick={() => void reload()}>
+              Tentar de novo
+            </Button>
+          </div>
+        )}
 
         <div className="space-y-6 pt-2">
           <div className="space-y-2">
@@ -321,15 +343,23 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               <ModelCombobox
                 id="ttsModel"
                 value={ttsModel}
-                onChange={setTtsModel}
+                onChange={(v) => {
+                  setTtsModel(v);
+                  setTtsDirty(true);
+                }}
                 purpose="audio"
                 catalog={catalog}
                 placeholder="busque ou cole um id (ex.: openai/gpt-4o-mini-tts)"
               />
             </div>
-            <Button onClick={() => void saveTts()} disabled={saving}>
-              <Save className="h-4 w-4" /> Salvar modelo de voz
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => void saveTts()} disabled={!ttsDirty || saving}>
+                <Save className="h-4 w-4" /> Salvar modelo de voz
+              </Button>
+              {ttsDirty && (
+                <span className="text-[11px] text-amber-600 dark:text-amber-400">alterações não salvas</span>
+              )}
+            </div>
           </div>
 
           <ModelShortlist
@@ -363,12 +393,18 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 step="0.5"
                 value={spendCap}
                 placeholder="sem teto"
-                onChange={(e) => setSpendCap(e.target.value)}
+                onChange={(e) => {
+                  setSpendCap(e.target.value);
+                  setCapDirty(true);
+                }}
                 className="max-w-[160px]"
               />
-              <Button onClick={() => void saveCap()} disabled={saving}>
+              <Button onClick={() => void saveCap()} disabled={!capDirty || saving}>
                 <Save className="h-4 w-4" /> Salvar teto
               </Button>
+              {capDirty && (
+                <span className="self-center text-[11px] text-amber-600 dark:text-amber-400">não salvo</span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Quando o custo de IA de um projeto atinge este valor, a geração no modo API é pausada

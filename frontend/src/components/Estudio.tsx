@@ -119,6 +119,9 @@ export function Estudio({
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
   const [improving, setImproving] = useState(false);
+  // The prompt build failed (server hiccup). Block generate/save until edited so
+  // the "(falha ao montar o prompt: …)" placeholder is never sent or persisted.
+  const [promptFailed, setPromptFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false); // upload/select/delete in flight (non-blocking visually)
   const [error, setError] = useState<string | null>(null);
@@ -193,22 +196,31 @@ export function Estudio({
   // ─── Candidates (per-item gallery) ────────────────────────────────────────────
   const [candidates, setCandidates] = useState<StudioCandidate[]>([]);
   const [candLoading, setCandLoading] = useState(false);
+  // A failed candidate listing must read as an error, not as "no candidates yet"
+  // — otherwise a successful paid generation can look like it produced nothing.
+  const [candError, setCandError] = useState<string | null>(null);
   // Local optimistic selection so a click highlights instantly (<200ms), before
   // the server round-trip + queue refresh land.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Synchronous re-entrancy guards: state-based disables only apply after a
+  // re-render, so a fast double-click would otherwise fire two paid jobs.
+  const generatingRef = useRef(false);
+  const improvingRef = useRef(false);
 
   const reloadCandidates = useCallback(async (item: StudioItem | null) => {
     if (!item?.listCandidates) {
       setCandidates([]);
+      setCandError(null);
       return;
     }
     setCandLoading(true);
+    setCandError(null);
     try {
       const list = await item.listCandidates();
       list.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
       setCandidates(list);
-    } catch {
-      setCandidates([]);
+    } catch (e) {
+      setCandError(String(e instanceof Error ? e.message : e));
     } finally {
       setCandLoading(false);
     }
@@ -244,24 +256,34 @@ export function Estudio({
       : null;
 
   // ─── Prompt loading ───────────────────────────────────────────────────────────
+  // Keyed on currentKey, not the whole `current` object: a background refresh
+  // rebuilds `current` with the same key, and re-running this would discard the
+  // user's unsaved prompt edits. Only an actual item switch should reload.
   useEffect(() => {
     if (!current) {
       setPrompt('');
+      setPromptFailed(false);
       return;
     }
     let alive = true;
     setPromptLoading(true);
     setPromptDirty(false);
     setPromptSaved(false);
+    setPromptFailed(false);
     void current
       .getPrompt()
       .then((p) => alive && setPrompt(p))
-      .catch((e) => alive && setPrompt(`(falha ao montar o prompt: ${String(e instanceof Error ? e.message : e)})`))
+      .catch((e) => {
+        if (!alive) return;
+        setPrompt(`(falha ao montar o prompt: ${String(e instanceof Error ? e.message : e)})`);
+        setPromptFailed(true);
+      })
       .finally(() => alive && setPromptLoading(false));
     return () => {
       alive = false;
     };
-  }, [current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentKey]);
 
   // ─── Navigation (pure local → instant) ────────────────────────────────────────
   const advance = useCallback(() => {
@@ -336,7 +358,8 @@ export function Estudio({
   }, [current, prompt, onRefresh]);
 
   const improvePromptNow = useCallback(async () => {
-    if (!current?.improvePrompt || improving) return;
+    if (!current?.improvePrompt || improving || improvingRef.current) return;
+    improvingRef.current = true;
     setImproving(true);
     setError(null);
     try {
@@ -351,6 +374,7 @@ export function Estudio({
       setError(`Não foi possível melhorar o prompt: ${String(e instanceof Error ? e.message : e)}`);
     } finally {
       setImproving(false);
+      improvingRef.current = false;
     }
   }, [current, improving, onRefresh, refreshSpend]);
 
@@ -366,7 +390,11 @@ export function Estudio({
   }, [generating]);
 
   const generate = useCallback(async () => {
-    if (!current?.apiGenerate || generating) return;
+    if (!current?.apiGenerate || generating || generatingRef.current) return;
+    if (promptFailed) {
+      setError('O prompt não pôde ser montado. Edite o texto antes de gerar.');
+      return;
+    }
     if (spendRef.current?.capReached) {
       const cap = spendRef.current.capUsd;
       setError(
@@ -375,6 +403,7 @@ export function Estudio({
       );
       return;
     }
+    generatingRef.current = true;
     setGenerating(true);
     setError(null);
     const before = spendRef.current?.totalUsd ?? 0;
@@ -401,13 +430,15 @@ export function Estudio({
       setError(`Geração falhou: ${String(e instanceof Error ? e.message : e)}`);
     } finally {
       setGenerating(false);
+      generatingRef.current = false;
     }
-  }, [current, generating, onRefresh, reloadCandidates, refreshSpend, prompt]);
+  }, [current, generating, promptFailed, onRefresh, reloadCandidates, refreshSpend, prompt]);
 
   // ─── Candidate choose/delete (optimistic → instant) ───────────────────────────
   const chooseCandidate = useCallback(
     (id: string) => {
       if (!current?.selectCandidate) return;
+      const prev = selectedId;
       setSelectedId(id); // instant highlight
       const target = current;
       void (async () => {
@@ -416,10 +447,13 @@ export function Estudio({
           await onRefresh();
         } catch (e) {
           setError(String(e instanceof Error ? e.message : e));
+          // The server didn't change selection — don't keep lying about which is in use.
+          setSelectedId(prev);
+          void reloadCandidates(itemsRef.current.find((i) => i.key === target.key) ?? target);
         }
       })();
     },
-    [current, onRefresh],
+    [current, selectedId, onRefresh, reloadCandidates],
   );
 
   const removeCandidate = useCallback(
@@ -464,6 +498,8 @@ export function Estudio({
         await onRefresh();
       } catch (e) {
         setError(String(e instanceof Error ? e.message : e));
+        // We advanced optimistically; the skip didn't persist, so come back to it.
+        if (!wasSkipped) setFocusKey(key);
       } finally {
         clearOptimistic([key]);
       }
@@ -492,10 +528,12 @@ export function Estudio({
         try {
           await current.setPriority(b);
           await neighbor.setPriority(a);
-          await onRefresh();
         } catch (e) {
           setError(String(e instanceof Error ? e.message : e));
         } finally {
+          // Always reconcile with server truth: a partial swap (first write ok,
+          // second failed) must not be hidden by clearing the overlay onto stale order.
+          await onRefresh();
           clearOptimistic([current.key, neighbor.key]);
         }
       })();
@@ -768,6 +806,7 @@ export function Estudio({
                   setPrompt(e.target.value);
                   setPromptDirty(true);
                   setPromptSaved(false);
+                  setPromptFailed(false);
                 }}
                 disabled={promptLoading || improving}
                 spellCheck={false}
@@ -948,6 +987,10 @@ export function Estudio({
             <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Carregando candidatos…
             </div>
+          ) : candError ? (
+            <p className="rounded-lg border border-dashed border-destructive/40 py-6 text-center text-sm text-destructive">
+              Não foi possível carregar os candidatos: {candError}
+            </p>
           ) : candidates.length === 0 ? (
             <p className="rounded-lg border border-dashed py-6 text-center text-sm text-muted-foreground">
               Nenhum candidato ainda. Clique em <span className="font-medium">Gerar</span> ou envie um arquivo.

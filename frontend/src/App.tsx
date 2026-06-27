@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Film, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FilmApp } from '@/FilmApp';
@@ -34,6 +34,12 @@ export function App() {
   const { settings } = useSettings();
   // First-run gate: nothing can be parsed or generated without a gateway key.
   const needsKey = !!settings && !settings.hasApiKey && !settings.apiKeyFromEnv;
+  // Mirror of `selected` for use inside stable callbacks without a side effect in
+  // a state updater (which StrictMode would double-invoke).
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   // Reflect back/forward (and manual hash edits) into state.
   useEffect(() => {
@@ -53,16 +59,10 @@ export function App() {
     writeHash(s, null);
   }, []);
 
-  const changeTab = useCallback(
-    (t: string) => {
-      setTab(t);
-      setSelected((cur) => {
-        writeHash(cur, t);
-        return cur;
-      });
-    },
-    [],
-  );
+  const changeTab = useCallback((t: string) => {
+    setTab(t);
+    writeHash(selectedRef.current, t);
+  }, []);
 
   const goProjects = useCallback(() => {
     setSelected(null);

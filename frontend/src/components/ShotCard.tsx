@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -35,6 +36,8 @@ export function ShotCard({
   const [promptOpen, setPromptOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [confirmShotOpen, setConfirmShotOpen] = useState(false);
+  const [takeToDelete, setTakeToDelete] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const generatePrompt = () => {
@@ -66,10 +69,10 @@ export function ShotCard({
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-semibold">
-            <span>Shot {shot.order}</span>
+            <span>Plano {shot.order}</span>
             <span className="text-muted-foreground">·</span>
             <span className="font-normal text-muted-foreground">
-              camera: &ldquo;{shot.camera || '—'}&rdquo;
+              câmera: &ldquo;{shot.camera || '—'}&rdquo;
             </span>
             <span className="text-muted-foreground">·</span>
             <Badge variant="outline">{shot.targetDuration}</Badge>
@@ -78,16 +81,16 @@ export function ShotCard({
 
         <div className="space-y-1 text-sm">
           <p>
-            <span className="font-medium">Action:</span> {shot.action || '—'}
+            <span className="font-medium">Ação:</span> {shot.action || '—'}
           </p>
           {shot.exit && (
             <p>
-              <span className="font-medium">Exit:</span> {shot.exit}
+              <span className="font-medium">Saída:</span> {shot.exit}
             </p>
           )}
           {shot.lines.length > 0 && (
             <div>
-              <span className="font-medium">Lines:</span>
+              <span className="font-medium">Falas:</span>
               <ul className="ml-1">
                 {shot.lines.map((l, i) => (
                   <li key={i} className="text-muted-foreground">
@@ -100,13 +103,13 @@ export function ShotCard({
           )}
           {shot.sounds.length > 0 && (
             <p>
-              <span className="font-medium">Sound:</span>{' '}
+              <span className="font-medium">Som:</span>{' '}
               {shot.sounds.join(', ')}
             </p>
           )}
           {shot.diegeticTexts.length > 0 && (
             <p>
-              <span className="font-medium">On-screen:</span>{' '}
+              <span className="font-medium">Em tela:</span>{' '}
               {shot.diegeticTexts.join(', ')}
             </p>
           )}
@@ -131,7 +134,7 @@ export function ShotCard({
 
         <div>
           <div className="mb-1 text-xs font-medium">
-            Takes ({shot.takes.length})
+            Tomadas ({shot.takes.length})
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {shot.takes.map((take) => (
@@ -143,7 +146,7 @@ export function ShotCard({
                 take={take}
                 selected={shot.selectedTakeId === take.id}
                 onSelect={(takeId) => onSelectTake(shot.id, takeId)}
-                onDelete={deleteTake}
+                onDelete={(takeId) => setTakeToDelete(takeId)}
               />
             ))}
           </div>
@@ -166,20 +169,20 @@ export function ShotCard({
             onClick={() => fileInput.current?.click()}
           >
             <Upload className="h-3 w-3" />
-            {uploading ? 'Uploading…' : 'Upload take'}
+            {uploading ? 'Enviando…' : 'Enviar tomada'}
           </Button>
         </div>
 
         <div className="flex flex-wrap gap-2 border-t pt-3">
           <Button size="sm" onClick={generatePrompt}>
-            <Sparkles className="h-3 w-3" /> Generate Prompt
+            <Sparkles className="h-3 w-3" /> Gerar Prompt
           </Button>
           <Button
             size="sm"
             variant="destructive"
-            onClick={() => onDeleteShot(shot.id)}
+            onClick={() => setConfirmShotOpen(true)}
           >
-            <Trash2 className="h-3 w-3" /> Delete shot
+            <Trash2 className="h-3 w-3" /> Apagar plano
           </Button>
         </div>
       </CardContent>
@@ -188,7 +191,7 @@ export function ShotCard({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              Generated prompt — Shot {shot.order}
+              Prompt gerado — Plano {shot.order}
             </DialogTitle>
           </DialogHeader>
           <Textarea
@@ -197,8 +200,69 @@ export function ShotCard({
             className="h-[50vh] font-mono text-xs"
           />
           <Button onClick={copyPrompt}>
-            <Copy className="h-4 w-4" /> Copy to clipboard
+            <Copy className="h-4 w-4" /> Copiar
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmShotOpen} onOpenChange={setConfirmShotOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apagar plano?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            O Plano {shot.order} e todas as suas tomadas geradas serão removidos.
+            Esta ação é irreversível, exceto pelo Histórico de versões.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmShotOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmShotOpen(false);
+                onDeleteShot(shot.id);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Apagar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={takeToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setTakeToDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apagar tomada?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Esta tomada gerada será removida em definitivo. Esta ação é
+            irreversível, exceto pelo Histórico de versões.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTakeToDelete(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const id = takeToDelete;
+                setTakeToDelete(null);
+                if (id) void deleteTake(id);
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Apagar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

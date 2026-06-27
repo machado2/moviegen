@@ -14,11 +14,11 @@ export interface AssemblyProps {
 function stateBadge(state: SceneAssemblyStatus['state']) {
   switch (state) {
     case 'assembled':
-      return <Badge variant="success">assembled</Badge>;
+      return <Badge variant="success">montada</Badge>;
     case 'stale':
-      return <Badge variant="warning">stale</Badge>;
+      return <Badge variant="warning">desatualizada</Badge>;
     default:
-      return <Badge variant="secondary">not assembled</Badge>;
+      return <Badge variant="secondary">não montada</Badge>;
   }
 }
 
@@ -38,13 +38,13 @@ export function Assembly({ projectId }: AssemblyProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Assembly</h2>
+        <h2 className="text-lg font-semibold">Montagem</h2>
         <Button variant="outline" size="sm" onClick={() => void reload()}>
-          <RefreshCw className="h-4 w-4" /> Refresh
+          <RefreshCw className="h-4 w-4" /> Atualizar
         </Button>
       </div>
 
-      {loading && <p className="text-muted-foreground">Loading status…</p>}
+      {loading && <p className="text-muted-foreground">Carregando status…</p>}
       {error && <p className="text-destructive">{error}</p>}
 
       {jobList.length > 0 && (
@@ -59,17 +59,17 @@ export function Assembly({ projectId }: AssemblyProps) {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Scenes</CardTitle>
+              <CardTitle>Cenas</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto p-0">
               <table className="w-full text-sm">
                 <thead className="border-b bg-muted/50 text-left">
                   <tr>
                     <th className="p-2">#</th>
-                    <th className="p-2">Title</th>
-                    <th className="p-2">Takes</th>
-                    <th className="p-2">State</th>
-                    <th className="p-2">Actions</th>
+                    <th className="p-2">Título</th>
+                    <th className="p-2">Tomadas</th>
+                    <th className="p-2">Estado</th>
+                    <th className="p-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -81,7 +81,7 @@ export function Assembly({ projectId }: AssemblyProps) {
                         {s.shotsWithTake}/{s.shotCount}
                         {!s.ready && s.missingShots.length > 0 && (
                           <span className="ml-1 text-xs text-destructive">
-                            (missing: {s.missingShots.join(', ')})
+                            (faltam: {s.missingShots.join(', ')})
                           </span>
                         )}
                       </td>
@@ -93,7 +93,7 @@ export function Assembly({ projectId }: AssemblyProps) {
                             disabled={!s.ready}
                             onClick={() => void assembleScene(s.sceneId)}
                           >
-                            <Clapperboard className="h-3 w-3" /> Assemble
+                            <Clapperboard className="h-3 w-3" /> Montar
                           </Button>
                           {s.state !== 'not-assembled' && (
                             <Button size="sm" variant="outline" asChild>
@@ -119,7 +119,7 @@ export function Assembly({ projectId }: AssemblyProps) {
                         colSpan={5}
                         className="p-4 text-center text-muted-foreground"
                       >
-                        No scenes to assemble.
+                        Nenhuma cena para montar.
                       </td>
                     </tr>
                   )}
@@ -130,18 +130,18 @@ export function Assembly({ projectId }: AssemblyProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Full movie</CardTitle>
+              <CardTitle>Filme completo</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
               <Button
                 disabled={!status.ready}
                 onClick={() => void assembleMovie()}
               >
-                <Film className="h-4 w-4" /> Assemble movie
+                <Film className="h-4 w-4" /> Montar filme
               </Button>
               {!status.ready && (
                 <span className="text-sm text-muted-foreground">
-                  All scenes must be assembled and up to date first.
+                  Todas as cenas precisam estar montadas e atualizadas antes.
                 </span>
               )}
               {status.movieAt && (
@@ -151,7 +151,7 @@ export function Assembly({ projectId }: AssemblyProps) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <Download className="h-4 w-4" /> Download movie
+                    <Download className="h-4 w-4" /> Baixar filme
                   </a>
                 </Button>
               )}

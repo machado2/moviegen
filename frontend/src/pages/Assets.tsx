@@ -5,6 +5,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -72,7 +79,8 @@ export function Assets({ projectId }: AssetsProps) {
       (roleFilter === 'all' || a.role === roleFilter),
   );
 
-  if (loading) return <p className="text-muted-foreground">Loading assets…</p>;
+  if (loading)
+    return <p className="text-muted-foreground">Carregando assets…</p>;
   if (error) return <p className="text-destructive">{error}</p>;
 
   return (
@@ -84,7 +92,7 @@ export function Assets({ projectId }: AssetsProps) {
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
+              <SelectItem value="all">Todos os tipos</SelectItem>
               {TYPES.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}
@@ -99,7 +107,7 @@ export function Assets({ projectId }: AssetsProps) {
               <SelectValue placeholder="Role" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All roles</SelectItem>
+              <SelectItem value="all">Todos os roles</SelectItem>
               {ROLES.map((r) => (
                 <SelectItem key={r} value={r}>
                   {r}
@@ -112,7 +120,7 @@ export function Assets({ projectId }: AssetsProps) {
           variant="outline"
           onClick={() => void api.projects.export(projectId)}
         >
-          <Download className="h-4 w-4" /> Bulk download ZIP
+          <Download className="h-4 w-4" /> Exportar ZIP
         </Button>
         <span className="text-sm text-muted-foreground">
           {filtered.length} asset{filtered.length === 1 ? '' : 's'}
@@ -128,9 +136,9 @@ export function Assets({ projectId }: AssetsProps) {
                 <th className="p-2">Type</th>
                 <th className="p-2">Role</th>
                 <th className="p-2">Status</th>
-                <th className="p-2">Character</th>
-                <th className="p-2">File</th>
-                <th className="p-2">Actions</th>
+                <th className="p-2">Personagem</th>
+                <th className="p-2">Arquivo</th>
+                <th className="p-2">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -150,7 +158,7 @@ export function Assets({ projectId }: AssetsProps) {
                     colSpan={7}
                     className="p-4 text-center text-muted-foreground"
                   >
-                    No assets match the current filters.
+                    Nenhum asset corresponde aos filtros.
                   </td>
                 </tr>
               )}
@@ -178,6 +186,7 @@ function AssetRow({
   onGenerate,
 }: AssetRowProps) {
   const inputId = `asset-upload-${asset.id}`;
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
     <tr className="border-b last:border-0">
       <td className="p-2 font-mono text-xs">{asset.id}</td>
@@ -225,19 +234,47 @@ function AssetRow({
             size="sm"
             variant="ghost"
             onClick={() => onGenerate(asset.id)}
-            title="Generate"
+            title="Gerar"
           >
             <RefreshCw className="h-3 w-3" />
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => onRemove(asset.id)}
-            title="Delete"
+            onClick={() => setConfirmOpen(true)}
+            title="Apagar"
           >
             <Trash2 className="h-3 w-3" />
           </Button>
         </div>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Apagar asset?</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              O asset{' '}
+              <span className="font-mono text-foreground">{asset.id}</span> e o
+              arquivo gerado serão removidos. Esta ação é irreversível, exceto
+              pelo Histórico de versões.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  onRemove(asset.id);
+                }}
+              >
+                <Trash2 className="h-4 w-4" /> Apagar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </td>
     </tr>
   );

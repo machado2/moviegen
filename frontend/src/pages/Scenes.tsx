@@ -41,7 +41,7 @@ export function Scenes({ project }: ScenesProps) {
     const number = scenes.length + 1;
     const created = await api.scenes.create(projectId, {
       number,
-      shortTitle: `Scene ${number}`,
+      shortTitle: `Cena ${number}`,
       slugTitle: '',
       targetDuration: '30s',
       summary: '',
@@ -74,13 +74,13 @@ export function Scenes({ project }: ScenesProps) {
     <div className="flex gap-4">
       <aside className="w-64 shrink-0 space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Scenes</h2>
+          <h2 className="text-sm font-semibold">Cenas</h2>
           <Button size="sm" variant="outline" onClick={() => void createScene()}>
-            <Plus className="h-3 w-3" /> Add
+            <Plus className="h-3 w-3" /> Nova
           </Button>
         </div>
         {scenesLoading && (
-          <p className="text-xs text-muted-foreground">Loading…</p>
+          <p className="text-xs text-muted-foreground">Carregando…</p>
         )}
         <ul className="space-y-1">
           {scenes.map((s) => (
@@ -101,15 +101,15 @@ export function Scenes({ project }: ScenesProps) {
           ))}
         </ul>
         {!scenesLoading && scenes.length === 0 && (
-          <p className="text-xs text-muted-foreground">No scenes yet.</p>
+          <p className="text-xs text-muted-foreground">Nenhuma cena ainda.</p>
         )}
       </aside>
 
       <section className="min-w-0 flex-1 space-y-4">
         {!selectedSceneId && (
-          <p className="text-muted-foreground">Select a scene.</p>
+          <p className="text-muted-foreground">Selecione uma cena.</p>
         )}
-        {sceneLoading && <p className="text-muted-foreground">Loading scene…</p>}
+        {sceneLoading && <p className="text-muted-foreground">Carregando cena…</p>}
         {sceneError && <p className="text-destructive">{sceneError}</p>}
 
         {scene && (
@@ -122,7 +122,7 @@ export function Scenes({ project }: ScenesProps) {
                 <Badge variant="outline">{scene.targetDuration}</Badge>
                 <Badge variant="secondary">
                   {scene.shots.filter((s) => s.selectedTakeId).length}/
-                  {scene.shots.length} takes selected
+                  {scene.shots.length} tomadas selecionadas
                 </Badge>
               </div>
               {scene.slugTitle && (
@@ -133,13 +133,13 @@ export function Scenes({ project }: ScenesProps) {
               {scene.summary && <p className="text-sm">{scene.summary}</p>}
               {(scene.continuity.in || scene.continuity.out) && (
                 <p className="text-xs text-muted-foreground">
-                  In: {scene.continuity.in || '—'} · Out:{' '}
+                  Entrada: {scene.continuity.in || '—'} · Saída:{' '}
                   {scene.continuity.out || '—'}
                 </p>
               )}
               {scene.refs.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1 pt-1">
-                  <span className="text-xs font-medium">Scene refs:</span>
+                  <span className="text-xs font-medium">Refs da cena:</span>
                   {scene.refs.map((ref) => (
                     <Badge key={ref.assetId} variant="outline">
                       {ref.assetId}
@@ -152,10 +152,10 @@ export function Scenes({ project }: ScenesProps) {
 
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">
-                Shots ({scene.shots.length})
+                Planos ({scene.shots.length})
               </h3>
               <Button size="sm" variant="outline" onClick={() => void addNewShot()}>
-                <Plus className="h-3 w-3" /> Add shot
+                <Plus className="h-3 w-3" /> Adicionar plano
               </Button>
             </div>
 

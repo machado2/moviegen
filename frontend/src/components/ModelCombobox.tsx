@@ -60,13 +60,19 @@ export function ModelCombobox({ value, onChange, purpose, catalog, placeholder, 
   }, [catalog, purpose, knownIds]);
 
   const matches = useMemo(() => {
-    const raw = query.toLowerCase().trim();
-    const base = baseId(query).toLowerCase();
+    // Multi-word search: every word must appear somewhere in the id or name, in
+    // any order (so "deepseek v4" matches "deepseek flash v4"). Tokens with '='
+    // are model params (e.g. quality=low), not search terms.
+    const terms = query
+      .toLowerCase()
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t && !t.includes('='));
     return pool
       .filter((m) => {
-        if (!raw) return true;
-        const idl = m.id.toLowerCase();
-        return idl.includes(raw) || m.name.toLowerCase().includes(raw) || (!!base && idl.includes(base));
+        if (!terms.length) return true;
+        const haystack = `${m.id} ${m.name}`.toLowerCase();
+        return terms.every((t) => haystack.includes(t));
       })
       .slice(0, 40);
   }, [pool, query]);

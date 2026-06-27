@@ -757,6 +757,10 @@ export function Estudio({
             >
               <ChevronDown className="h-4 w-4" />
             </Button>
+            <span className="ml-auto hidden text-[11px] text-muted-foreground sm:inline">
+              Atalhos: <kbd className="rounded border px-1">←</kbd> <kbd className="rounded border px-1">→</kbd> navegar ·{' '}
+              <kbd className="rounded border px-1">c</kbd> copiar prompt
+            </span>
           </div>
           {/* Item rail: single horizontal scroll row so it never grows vertically. */}
           <div className="flex gap-1 overflow-x-auto pb-1">

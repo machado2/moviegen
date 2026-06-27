@@ -20,9 +20,10 @@ import {
   Wand2,
   X,
 } from 'lucide-react';
-import type { SpendDTO } from '@mediagen/types';
+import type { ModelCatalogEntry, SpendDTO } from '@mediagen/types';
+import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { JobConnectionLostError } from '@/hooks/useStudioQueue';
 import { cn } from '@/lib/utils';
 import { formatUsd, spendLabel } from '@/lib/cost';
@@ -125,6 +126,12 @@ export function Estudio({
   // the "(falha ao montar o prompt: …)" placeholder is never sent or persisted.
   const [promptFailed, setPromptFailed] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Model catalog (best-effort) just to show a cost hint next to the picker. The
+  // gateway catalog is global, so the film client's endpoint serves both stacks.
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
+  useEffect(() => {
+    void api.models.catalog().then(setCatalog).catch(() => setCatalog([]));
+  }, []);
   const [busy, setBusy] = useState(false); // upload/select/delete in flight (non-blocking visually)
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -183,6 +190,17 @@ export function Estudio({
   const currentIsVideo = current?.accepts === 'video';
   const activeModel = currentIsVideo ? videoModel : imageModel;
   const modelMissing = currentIsVideo ? videoModels.length === 0 : imageModels.length === 0;
+  // A per-image price from the catalog, when known (video has no catalog price).
+  const activeModelImagePrice = (() => {
+    if (currentIsVideo || !activeModel) return null;
+    const baseModel = activeModel.split(/\s+/)[0];
+    return catalog.find((m) => m.id === baseModel)?.pricing.image ?? null;
+  })();
+  const costHint = currentIsVideo
+    ? 'custo informado após gerar'
+    : activeModelImagePrice != null
+      ? `~$${activeModelImagePrice}/img`
+      : null;
   const doneCount = items.filter((i) => i.done).length;
   const skippedCount = items.filter((i) => !i.done && i.skipped).length;
   const pendingCount = items.length - doneCount - skippedCount;
@@ -398,6 +416,8 @@ export function Estudio({
 
   // ─── API generation (per-item, no auto-advance, no auto-select) ───────────────
   const [generating, setGenerating] = useState(false);
+  // Video can be expensive — confirm before billing one.
+  const [confirmGenVideo, setConfirmGenVideo] = useState(false);
   const [genElapsed, setGenElapsed] = useState(0);
   useEffect(() => {
     if (!generating) return;
@@ -669,9 +689,14 @@ export function Estudio({
               ))}
             </select>
           )}
+          {current?.apiGenerate && !modelMissing && costHint && (
+            <span className="hidden text-xs text-muted-foreground sm:inline" title="Custo estimado por geração">
+              {costHint}
+            </span>
+          )}
           {current?.apiGenerate && (
             <Button
-              onClick={() => void generate()}
+              onClick={() => (currentIsVideo ? setConfirmGenVideo(true) : void generate())}
               disabled={generating || modelMissing}
               className="gap-1.5"
               title={
@@ -1134,6 +1159,37 @@ export function Estudio({
           )}
         </div>
       )}
+
+      {/* ─── Confirm before billing a (potentially expensive) video ─────────── */}
+      <Dialog open={confirmGenVideo} onOpenChange={setConfirmGenVideo}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gerar vídeo?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>
+              Gerar vídeo pode custar bem mais que imagem, conforme o modelo. O custo real
+              aparece após a geração e conta no teto do projeto.
+            </p>
+            <p className="text-muted-foreground">
+              Modelo: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{activeModel}</code>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmGenVideo(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmGenVideo(false);
+                void generate();
+              }}
+            >
+              <Sparkles className="h-4 w-4" /> Gerar vídeo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ─── Fullscreen viewer: accessible Dialog (focus trap + restore, Esc) ── */}
       <Dialog open={!!viewer} onOpenChange={(o) => !o && setViewer(null)}>

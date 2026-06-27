@@ -276,6 +276,10 @@ export function Overview({ project, onChanged }: OverviewProps) {
               e pode abortar enquanto roda.
             </p>
             <p className="text-muted-foreground">
+              Reparsear mescla pelo número da cena: preserva as tomadas geradas e edições
+              manuais, atualizando só os textos. Uma versão é registrada no Histórico.
+            </p>
+            <p className="text-muted-foreground">
               Modelo de parse: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{settings?.parseModel ?? '—'}</code>
               {' '}· muda em Configurações.
             </p>

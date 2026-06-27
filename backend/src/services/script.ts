@@ -72,9 +72,21 @@ export async function getActiveParseJob(projectId: string): Promise<JobProgress 
 }
 
 /**
- * Apply a reviewed ParsedScript to a project: create character assets (pending),
- * voice assets (pending), and the scenes + shots. This replaces any existing
- * scene structure (additive takes are not affected because new scenes are new).
+ * Apply a reviewed ParsedScript to a project by MERGING it into the existing
+ * structure, never destructively replacing it — so a re-parse cannot lose
+ * generated takes, paid media, or manual edits.
+ *
+ *  - Scenes are matched by `number`: a matched scene keeps its id and file, and
+ *    only its descriptive fields are refreshed.
+ *  - Shots are matched by `order` within a matched scene: a matched shot keeps
+ *    its id, takes, and selectedTakeId; its descriptive fields are refreshed.
+ *    A shot order present on disk but absent from the parse is kept untouched.
+ *  - A parsed scene with a brand-new number is created fresh; an existing scene
+ *    whose number is absent from the parse is left untouched.
+ *  - Character/voice assets are upserted by their stable slug id: an existing
+ *    asset keeps its status, file, prompt, and variants/selectedVariantId (its
+ *    generated image/voice), refreshing only the descriptive fields. Only
+ *    brand-new characters get a pending asset.
  */
 export async function applyParsedScript(projectId: string, parsed: ParsedScript): Promise<Project> {
   const project = await getProject(projectId);
@@ -83,72 +95,169 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
   project.language = parsed.language || project.language;
   if (parsed.globalStyle) project.globalStyle = parsed.globalStyle;
 
-  // Build character assets. Concept asset id is the character slug for stable refs.
+  // Upsert character assets. Concept asset id is the character slug for stable
+  // refs. An already-present asset keeps its generated media (status/file/
+  // prompt/variants) — we only refresh the descriptive fields, so re-parsing
+  // never resets a generated character image/voice back to pending.
   const conceptIdByChar = new Map<string, string>();
   for (const c of parsed.characters) {
     const charSlug = slugify(c.id || c.name);
     const conceptId = charSlug; // stable, human-readable
-    const conceptAsset: Asset = {
-      id: conceptId,
-      type: 'image',
-      role: 'character-concept',
-      status: 'pending',
-      file: null,
-      prompt: 'Reference image for {ref}.',
-      characterName: c.name,
-      description: c.description,
-    };
-    const voiceAsset: Asset = {
-      id: `${charSlug}-voice`,
-      type: 'audio',
-      role: 'voice',
-      status: 'pending',
-      file: null,
-      prompt: 'Voice timbre sample for {ref}.',
-      characterName: c.name,
-      description: c.voiceDescription,
-    };
-    project.assets[conceptAsset.id] = conceptAsset;
-    project.assets[voiceAsset.id] = voiceAsset;
+    const voiceId = `${charSlug}-voice`;
+
+    const existingConcept = project.assets[conceptId];
+    if (existingConcept) {
+      existingConcept.characterName = c.name;
+      existingConcept.description = c.description;
+    } else {
+      project.assets[conceptId] = {
+        id: conceptId,
+        type: 'image',
+        role: 'character-concept',
+        status: 'pending',
+        file: null,
+        prompt: 'Reference image for {ref}.',
+        characterName: c.name,
+        description: c.description,
+      };
+    }
+
+    const existingVoice = project.assets[voiceId];
+    if (existingVoice) {
+      existingVoice.characterName = c.name;
+      existingVoice.description = c.voiceDescription;
+    } else {
+      project.assets[voiceId] = {
+        id: voiceId,
+        type: 'audio',
+        role: 'voice',
+        status: 'pending',
+        file: null,
+        prompt: 'Voice timbre sample for {ref}.',
+        characterName: c.name,
+        description: c.voiceDescription,
+      };
+    }
     conceptIdByChar.set(charSlug, conceptId);
   }
 
-  // Build scenes + shots and write each scene file.
-  const sceneRefs: SceneRef[] = [];
-  for (const ps of parsed.scenes) {
-    const sceneId = `scene-${ps.number}-${slugify(ps.shortTitle).slice(0, 24)}-${newId().slice(0, 4)}`;
-    const shots: Shot[] = ps.shots.map((shot) => ({
-      id: newId('shot'),
-      order: shot.order,
-      targetDuration: shot.targetDuration || '15s',
-      camera: shot.camera,
-      action: shot.action,
-      exit: shot.exit,
-      diegeticTexts: shot.diegeticTexts ?? [],
-      sounds: shot.sounds ?? [],
-      lines: shot.lines ?? [],
-      refs: (shot.characterIds ?? [])
-        .map((cid) => conceptIdByChar.get(slugify(cid)))
-        .filter((id): id is string => Boolean(id))
-        .map((assetId) => ({ assetId, required: true })),
-      selectedTakeId: null,
-      takes: [],
-    }));
-    shots.sort((a, b) => a.order - b.order);
-    const scene: Scene = {
-      id: sceneId,
-      number: ps.number,
-      shortTitle: ps.shortTitle,
-      slugTitle: ps.slugTitle,
-      targetDuration: '',
-      summary: ps.summary,
-      continuity: { in: ps.continuityIn, out: ps.continuityOut },
-      refs: [],
-      shots,
-    };
-    await fs.writeNickel(fs.sceneFile(projectId, sceneId), scene);
-    sceneRefs.push({ id: sceneId, number: ps.number, shortTitle: ps.shortTitle, file: `scenes/${sceneId}.ncl` });
+  // Map the parsed shot's character ids to asset refs.
+  const shotRefs = (shot: ParsedScript['scenes'][number]['shots'][number]): Shot['refs'] =>
+    (shot.characterIds ?? [])
+      .map((cid) => conceptIdByChar.get(slugify(cid)))
+      .filter((id): id is string => Boolean(id))
+      .map((assetId) => ({ assetId, required: true }));
+
+  // Read existing scenes (by number) so we can merge into them in place.
+  const existingByNumber = new Map<number, Scene>();
+  for (const ref of project.scenes) {
+    const file = fs.sceneFile(projectId, ref.id);
+    if (await fs.pathExists(file)) {
+      const scene = await fs.readNickel<Scene>(file);
+      existingByNumber.set(scene.number, scene);
+    }
   }
+
+  const sceneRefs: SceneRef[] = [];
+  const parsedNumbers = new Set<number>();
+  for (const ps of parsed.scenes) {
+    parsedNumbers.add(ps.number);
+    const existing = existingByNumber.get(ps.number);
+
+    if (existing) {
+      // Matched scene: keep id + file, refresh descriptive fields, merge shots.
+      const existingByOrder = new Map<number, Shot>();
+      for (const s of existing.shots) existingByOrder.set(s.order, s);
+      const parsedOrders = new Set<number>();
+      const mergedShots: Shot[] = [];
+      for (const shot of ps.shots) {
+        parsedOrders.add(shot.order);
+        const ex = existingByOrder.get(shot.order);
+        if (ex) {
+          // Keep id, takes, selectedTakeId; refresh descriptive fields.
+          mergedShots.push({
+            ...ex,
+            order: shot.order,
+            targetDuration: shot.targetDuration || ex.targetDuration || '15s',
+            camera: shot.camera,
+            action: shot.action,
+            exit: shot.exit,
+            diegeticTexts: shot.diegeticTexts ?? [],
+            sounds: shot.sounds ?? [],
+            lines: shot.lines ?? [],
+            refs: shotRefs(shot),
+          });
+        } else {
+          mergedShots.push({
+            id: newId('shot'),
+            order: shot.order,
+            targetDuration: shot.targetDuration || '15s',
+            camera: shot.camera,
+            action: shot.action,
+            exit: shot.exit,
+            diegeticTexts: shot.diegeticTexts ?? [],
+            sounds: shot.sounds ?? [],
+            lines: shot.lines ?? [],
+            refs: shotRefs(shot),
+            selectedTakeId: null,
+            takes: [],
+          });
+        }
+      }
+      // Keep existing shots the parse no longer mentions (their takes survive).
+      for (const s of existing.shots) {
+        if (!parsedOrders.has(s.order)) mergedShots.push(s);
+      }
+      mergedShots.sort((a, b) => a.order - b.order);
+      const merged: Scene = {
+        ...existing,
+        shortTitle: ps.shortTitle,
+        slugTitle: ps.slugTitle,
+        summary: ps.summary,
+        continuity: { in: ps.continuityIn, out: ps.continuityOut },
+        shots: mergedShots,
+      };
+      await fs.writeNickel(fs.sceneFile(projectId, existing.id), merged);
+      sceneRefs.push({ id: existing.id, number: existing.number, shortTitle: ps.shortTitle, file: `scenes/${existing.id}.ncl` });
+    } else {
+      // Brand-new scene number: create fresh.
+      const sceneId = `scene-${ps.number}-${slugify(ps.shortTitle).slice(0, 24)}-${newId().slice(0, 4)}`;
+      const shots: Shot[] = ps.shots.map((shot) => ({
+        id: newId('shot'),
+        order: shot.order,
+        targetDuration: shot.targetDuration || '15s',
+        camera: shot.camera,
+        action: shot.action,
+        exit: shot.exit,
+        diegeticTexts: shot.diegeticTexts ?? [],
+        sounds: shot.sounds ?? [],
+        lines: shot.lines ?? [],
+        refs: shotRefs(shot),
+        selectedTakeId: null,
+        takes: [],
+      }));
+      shots.sort((a, b) => a.order - b.order);
+      const scene: Scene = {
+        id: sceneId,
+        number: ps.number,
+        shortTitle: ps.shortTitle,
+        slugTitle: ps.slugTitle,
+        targetDuration: '',
+        summary: ps.summary,
+        continuity: { in: ps.continuityIn, out: ps.continuityOut },
+        refs: [],
+        shots,
+      };
+      await fs.writeNickel(fs.sceneFile(projectId, sceneId), scene);
+      sceneRefs.push({ id: sceneId, number: ps.number, shortTitle: ps.shortTitle, file: `scenes/${sceneId}.ncl` });
+    }
+  }
+
+  // Keep existing scenes the parse no longer mentions, untouched.
+  for (const ref of project.scenes) {
+    if (!parsedNumbers.has(ref.number)) sceneRefs.push(ref);
+  }
+
   sceneRefs.sort((a, b) => a.number - b.number);
   project.scenes = sceneRefs;
   const saved = await saveProject(project);
@@ -156,7 +265,7 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
   await clearParsedScript(projectId);
   await fs.commitProject(
     projectId,
-    `parse aplicado: ${parsed.scenes.length} cenas · ${parsed.characters.length} personagens`,
+    `parse mesclado: ${parsed.scenes.length} cenas · ${parsed.characters.length} personagens`,
   );
   return saved;
 }

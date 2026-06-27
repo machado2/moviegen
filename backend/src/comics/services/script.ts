@@ -74,6 +74,24 @@ export async function clearParsedScript(projectId: string): Promise<void> {
   await fs.remove(cfs.parsedScriptFile(projectId));
 }
 
+/**
+ * Apply a reviewed ParsedComicsScript to a project by MERGING it into the
+ * existing structure, never destructively replacing it — so a re-parse cannot
+ * lose generated renders, paid media, or manual edits.
+ *
+ *  - Pranchas are matched by `number`: a matched prancha keeps its id and file,
+ *    and only its descriptive fields (shortTitle, origin, layout) are refreshed.
+ *  - Quadros are matched by `order` within a matched prancha: a matched quadro
+ *    keeps its id, renders, and selectedRenderId; its descriptive fields are
+ *    refreshed. A quadro order present on disk but absent from the parse is
+ *    kept untouched.
+ *  - A parsed prancha with a brand-new number is created fresh; an existing
+ *    prancha whose number is absent from the parse is left untouched.
+ *  - Character assets are upserted by their stable slug id: an existing asset
+ *    keeps its status, file, and variants/selectedVariantId (its generated
+ *    image), refreshing only the descriptive fields. Only brand-new characters
+ *    get a pending asset.
+ */
 export async function applyParsedComicsScript(
   projectId: string,
   parsed: ParsedComicsScript,
@@ -83,53 +101,139 @@ export async function applyParsedComicsScript(
   project.language = parsed.language || project.language;
   if (parsed.globalStyle) project.globalStyle = parsed.globalStyle;
 
-  // Character assets (pending). Asset id is the character slug for stable refs.
+  // Upsert character assets. An already-present asset keeps its generated media
+  // (status/file/variants) — we only refresh the descriptive fields, so
+  // re-parsing never resets a generated character image back to pending.
   const assetIdByChar = new Map<string, string>();
   for (const c of parsed.characters) {
     const charSlug = slugify(c.id || c.name);
-    const asset: ComicsAsset = {
-      id: charSlug,
-      type: 'image',
-      role: 'character',
-      status: 'pending',
-      file: null,
-      characterName: c.name,
-      characterDescription: c.description,
-    };
-    project.assets[asset.id] = asset;
-    assetIdByChar.set(charSlug, asset.id);
+    const existing = project.assets[charSlug];
+    if (existing) {
+      existing.characterName = c.name;
+      existing.characterDescription = c.description;
+    } else {
+      project.assets[charSlug] = {
+        id: charSlug,
+        type: 'image',
+        role: 'character',
+        status: 'pending',
+        file: null,
+        characterName: c.name,
+        characterDescription: c.description,
+      };
+    }
+    assetIdByChar.set(charSlug, charSlug);
+  }
+
+  const mapCharacters = (q: ParsedComicsScript['pranchas'][number]['quadros'][number]): string[] =>
+    (q.characterIds ?? [])
+      .map((cid) => assetIdByChar.get(slugify(cid)))
+      .filter((id): id is string => Boolean(id));
+
+  // Read existing pranchas (by number) so we can merge into them in place.
+  const existingByNumber = new Map<number, Prancha>();
+  for (const ref of project.pranchas) {
+    const file = cfs.pranchaFile(projectId, ref.id);
+    if (await fs.pathExists(file)) {
+      const prancha = await fs.readNickel<Prancha>(file);
+      existingByNumber.set(prancha.number, prancha);
+    }
   }
 
   const refs: PranchaRef[] = [];
+  const parsedNumbers = new Set<number>();
   for (const pp of parsed.pranchas) {
-    const pranchaId = `prancha-${pp.number}-${slugify(pp.shortTitle).slice(0, 24)}-${newId().slice(0, 4)}`;
-    const quadros: Quadro[] = pp.quadros.map((q, i) => ({
-      id: newId('quadro'),
-      order: i + 1,
-      // Trust the layout, not the model, for slot format.
-      slotFormat: slotFormatFor(pp.layout, i),
-      composition: q.composition,
-      characters: (q.characterIds ?? [])
-        .map((cid) => assetIdByChar.get(slugify(cid)))
-        .filter((id): id is string => Boolean(id)),
-      setting: q.setting,
-      texts: q.texts ?? [],
-      restrictions: q.restrictions ?? [],
-      refs: [],
-      selectedRenderId: null,
-      renders: [],
-    }));
-    const prancha: Prancha = {
-      id: pranchaId,
-      number: pp.number,
-      shortTitle: pp.shortTitle,
-      origin: pp.origin,
-      layout: pp.layout,
-      quadros,
-    };
-    await fs.writeNickel(cfs.pranchaFile(projectId, pranchaId), prancha);
-    refs.push({ id: pranchaId, number: pp.number, shortTitle: pp.shortTitle, file: `pranchas/${pranchaId}.ncl` });
+    parsedNumbers.add(pp.number);
+    const existing = existingByNumber.get(pp.number);
+
+    if (existing) {
+      // Matched prancha: keep id + file, refresh descriptive fields, merge quadros.
+      const existingByOrder = new Map<number, Quadro>();
+      for (const q of existing.quadros) existingByOrder.set(q.order, q);
+      const parsedOrders = new Set<number>();
+      const mergedQuadros: Quadro[] = [];
+      pp.quadros.forEach((q, i) => {
+        const order = i + 1;
+        parsedOrders.add(order);
+        const ex = existingByOrder.get(order);
+        if (ex) {
+          // Keep id, renders, selectedRenderId; refresh descriptive fields.
+          mergedQuadros.push({
+            ...ex,
+            order,
+            // Trust the layout, not the model, for slot format.
+            slotFormat: slotFormatFor(pp.layout, i),
+            composition: q.composition,
+            characters: mapCharacters(q),
+            setting: q.setting,
+            texts: q.texts ?? [],
+            restrictions: q.restrictions ?? [],
+          });
+        } else {
+          mergedQuadros.push({
+            id: newId('quadro'),
+            order,
+            slotFormat: slotFormatFor(pp.layout, i),
+            composition: q.composition,
+            characters: mapCharacters(q),
+            setting: q.setting,
+            texts: q.texts ?? [],
+            restrictions: q.restrictions ?? [],
+            refs: [],
+            selectedRenderId: null,
+            renders: [],
+          });
+        }
+      });
+      // Keep existing quadros the parse no longer mentions (their renders survive).
+      for (const q of existing.quadros) {
+        if (!parsedOrders.has(q.order)) mergedQuadros.push(q);
+      }
+      mergedQuadros.sort((a, b) => a.order - b.order);
+      const merged: Prancha = {
+        ...existing,
+        shortTitle: pp.shortTitle,
+        origin: pp.origin,
+        layout: pp.layout,
+        quadros: mergedQuadros,
+      };
+      await fs.writeNickel(cfs.pranchaFile(projectId, existing.id), merged);
+      refs.push({ id: existing.id, number: existing.number, shortTitle: pp.shortTitle, file: `pranchas/${existing.id}.ncl` });
+    } else {
+      // Brand-new prancha number: create fresh.
+      const pranchaId = `prancha-${pp.number}-${slugify(pp.shortTitle).slice(0, 24)}-${newId().slice(0, 4)}`;
+      const quadros: Quadro[] = pp.quadros.map((q, i) => ({
+        id: newId('quadro'),
+        order: i + 1,
+        // Trust the layout, not the model, for slot format.
+        slotFormat: slotFormatFor(pp.layout, i),
+        composition: q.composition,
+        characters: mapCharacters(q),
+        setting: q.setting,
+        texts: q.texts ?? [],
+        restrictions: q.restrictions ?? [],
+        refs: [],
+        selectedRenderId: null,
+        renders: [],
+      }));
+      const prancha: Prancha = {
+        id: pranchaId,
+        number: pp.number,
+        shortTitle: pp.shortTitle,
+        origin: pp.origin,
+        layout: pp.layout,
+        quadros,
+      };
+      await fs.writeNickel(cfs.pranchaFile(projectId, pranchaId), prancha);
+      refs.push({ id: pranchaId, number: pp.number, shortTitle: pp.shortTitle, file: `pranchas/${pranchaId}.ncl` });
+    }
   }
+
+  // Keep existing pranchas the parse no longer mentions, untouched.
+  for (const ref of project.pranchas) {
+    if (!parsedNumbers.has(ref.number)) refs.push(ref);
+  }
+
   refs.sort((a, b) => a.number - b.number);
   project.pranchas = refs;
   const saved = await saveProject(project);
@@ -137,7 +241,7 @@ export async function applyParsedComicsScript(
   await clearParsedScript(projectId);
   await cfs.commitProject(
     projectId,
-    `parse aplicado: ${parsed.pranchas.length} pranchas · ${parsed.characters.length} personagens`,
+    `parse mesclado: ${parsed.pranchas.length} pranchas · ${parsed.characters.length} personagens`,
   );
   return saved;
 }

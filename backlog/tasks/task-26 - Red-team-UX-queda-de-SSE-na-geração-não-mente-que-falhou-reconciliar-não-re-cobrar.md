@@ -3,10 +3,10 @@ id: TASK-26
 title: >-
   Red-team UX: queda de SSE na geração não mente que falhou (reconciliar, não
   re-cobrar)
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-06-27 20:38'
-updated_date: '2026-06-27 21:28'
+updated_date: '2026-06-27 22:15'
 labels:
   - redteam
   - frontend

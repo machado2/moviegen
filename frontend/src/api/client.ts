@@ -11,6 +11,8 @@ import type {
   Take,
   Character,
   ParsedScript,
+  RawScene,
+  SceneBreakdown,
   JobProgress,
   MovieAssemblyStatus,
   SceneAssemblyStatus,
@@ -169,6 +171,23 @@ export const scriptApi = {
   },
   cancelParse(projectId: string): Promise<{ cancelled: boolean }> {
     return request(`/projects/${projectId}/script/parse/cancel`, { method: 'POST' });
+  },
+  // Raw scenes (source layer): faithful segmentation of the screenplay.
+  rawScenes(projectId: string): Promise<RawScene[]> {
+    return request(`/projects/${projectId}/script/raw-scenes`);
+  },
+  extractRawScenes(projectId: string): Promise<RawScene[]> {
+    return request(`/projects/${projectId}/script/raw-scenes`, { method: 'POST' });
+  },
+  // Per-scene transform: start a job (follow over SSE), list/select breakdowns.
+  transformScene(projectId: string, number: number): Promise<{ jobId: string }> {
+    return request(`/projects/${projectId}/scenes/${number}/transform`, { method: 'POST' });
+  },
+  breakdowns(projectId: string, number: number): Promise<{ breakdowns: SceneBreakdown[]; selectedId: string | null }> {
+    return request(`/projects/${projectId}/scenes/${number}/breakdowns`);
+  },
+  selectBreakdown(projectId: string, number: number, bid: string): Promise<unknown> {
+    return request(`/projects/${projectId}/scenes/${number}/breakdowns/${bid}/select`, { method: 'POST' });
   },
   apply(projectId: string, parsed: ParsedScript): Promise<ProjectDTO> {
     return request(`/projects/${projectId}/script/apply`, {

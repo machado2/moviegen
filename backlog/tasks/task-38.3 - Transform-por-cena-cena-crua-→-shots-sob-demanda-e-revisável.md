@@ -1,10 +1,10 @@
 ---
 id: TASK-38.3
 title: 'Transform por cena (cena crua → shots), sob demanda e revisável'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 23:48'
-updated_date: '2026-06-28 01:50'
+updated_date: '2026-06-28 13:39'
 labels:
   - pipeline
   - backend
@@ -26,10 +26,10 @@ Deve: ser disparável por cena (gatilho no Pipeline/Cenas/Estúdio — decisão 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Transformar uma cena gera seus shots sem reprocessar o roteiro inteiro
-- [ ] #2 Re-transformar uma cena não destrói a cena crua nem (idealmente) as tomadas já feitas dos shots preservados
-- [ ] #3 A transformação recebe contexto (elenco/lugares + cenas vizinhas) para continuidade
-- [ ] #4 Suporta candidatos de breakdown da cena (vários resultados a escolher)
+- [x] #1 Transformar uma cena gera seus shots sem reprocessar o roteiro inteiro
+- [x] #2 Re-transformar uma cena não destrói a cena crua nem (idealmente) as tomadas já feitas dos shots preservados
+- [x] #3 A transformação recebe contexto (elenco/lugares + cenas vizinhas) para continuidade
+- [x] #4 Suporta candidatos de breakdown da cena (vários resultados a escolher)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -42,3 +42,9 @@ Deve: ser disparável por cena (gatilho no Pipeline/Cenas/Estúdio — decisão 
 5. Frontend: ação 'Transformar cena' em Cenas (lista cenas cruas + botão + candidatos). Mínimo viável primeiro.
 6. Não toca a cena crua; re-rodar é barato. Aditivo: o parse one-shot atual continua funcionando.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Backend (commit c5066d8): transformAgent + SceneBreakdown + startSceneTransform/list/select + applyParsedScene (merge preserva takes) + endpoints. Frontend: client (rawScenes/extract/transformScene/breakdowns/selectBreakdown) + RawScenesPanel (extrair cenas cruas → Transformar por cena via job/SSE → escolher breakdown 'Usar') no topo da página Cenas. Smoke backend 8/8; builds verdes. Aditivo: parse one-shot intacto.
+<!-- SECTION:NOTES:END -->

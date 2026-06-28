@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ShotCard } from '@/components/ShotCard';
+import { RawScenesPanel } from '@/components/RawScenesPanel';
 import { useScenes, useScene } from '@/hooks/useScene';
 import { api } from '@/api/client';
 import { cn } from '@/lib/utils';
@@ -71,7 +72,9 @@ export function Scenes({ project }: ScenesProps) {
   };
 
   return (
-    <div className="flex gap-4">
+    <div className="space-y-4">
+      <RawScenesPanel projectId={projectId} onApplied={reloadScenes} />
+      <div className="flex gap-4">
       <aside className="w-64 shrink-0 space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Cenas</h2>
@@ -179,6 +182,7 @@ export function Scenes({ project }: ScenesProps) {
           </>
         )}
       </section>
+      </div>
     </div>
   );
 }

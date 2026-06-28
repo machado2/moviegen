@@ -4,11 +4,15 @@ import * as fs from '../storage/filesystem.js';
 import { getProject, toDTO } from '../services/project.js';
 import {
   applyParsedScript,
+  cancelSceneTransform,
   cancelScriptParse,
   extractRawScenes,
   getActiveParseJob,
   getParsedScript,
   listRawScenes,
+  listSceneBreakdowns,
+  selectSceneBreakdown,
+  startSceneTransform,
   startScriptParse,
   structuredImport,
 } from '../services/script.js';
@@ -62,6 +66,28 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
   );
   app.get<{ Params: { id: string } }>('/projects/:id/script/raw-scenes', async (req) =>
     listRawScenes(req.params.id),
+  );
+
+  // Per-scene transform (raw scene → shots). POST starts a job (jobId; follow via
+  // the shared SSE jobs endpoint); GET lists candidate breakdowns; select applies.
+  app.post<{ Params: { id: string; number: string } }>(
+    '/projects/:id/scenes/:number/transform',
+    async (req, reply) => {
+      const job = await startSceneTransform(req.params.id, Number(req.params.number));
+      return reply.code(202).send({ jobId: job.id, ...job });
+    },
+  );
+  app.post<{ Params: { id: string; number: string } }>(
+    '/projects/:id/scenes/:number/transform/cancel',
+    async (req) => ({ cancelled: await cancelSceneTransform(req.params.id, Number(req.params.number)) }),
+  );
+  app.get<{ Params: { id: string; number: string } }>(
+    '/projects/:id/scenes/:number/breakdowns',
+    async (req) => listSceneBreakdowns(req.params.id, Number(req.params.number)),
+  );
+  app.post<{ Params: { id: string; number: string; bid: string } }>(
+    '/projects/:id/scenes/:number/breakdowns/:bid/select',
+    async (req) => selectSceneBreakdown(req.params.id, Number(req.params.number), req.params.bid),
   );
 
   // The pending parsed-but-not-applied script, or null. Lets the UI restore the

@@ -210,6 +210,16 @@ export interface ParsedScene {
   shots: ParsedShot[];
 }
 
+// One candidate breakdown of a raw scene into shots (per-scene transform). The
+// user can generate several and pick one to apply to the production scene.
+export interface SceneBreakdown {
+  id: string;
+  sceneNumber: number;
+  createdAt: string;       // ISO 8601
+  model: string;
+  scene: ParsedScene;
+}
+
 export interface ParsedShot {
   order: number;
   camera: string;
@@ -291,7 +301,8 @@ export interface JobProgress {
     | 'render-generate'
     | 'image-generate'
     | 'video-generate'
-    | 'script-parse';
+    | 'script-parse'
+    | 'scene-transform';
   status: JobStatus;
   progress: number;          // 0..1
   message: string;

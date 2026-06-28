@@ -47,6 +47,17 @@ export function rawScenesDir(projectId: string): string {
 export function rawSceneFile(projectId: string, number: number): string {
   return path.join(rawScenesDir(projectId), `${number}.ncl`);
 }
+// Per-scene transform candidates ("breakdowns"): several ways to break one raw
+// scene into shots; the user selects one to apply to the production scene.
+export function sceneBreakdownsDir(projectId: string, number: number): string {
+  return path.join(projectDir(projectId), 'scene-breakdowns', String(number));
+}
+export function sceneBreakdownFile(projectId: string, number: number, id: string): string {
+  return path.join(sceneBreakdownsDir(projectId, number), `${id}.ncl`);
+}
+export function sceneBreakdownSelectedFile(projectId: string, number: number): string {
+  return path.join(sceneBreakdownsDir(projectId, number), 'selected.txt');
+}
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');
 }

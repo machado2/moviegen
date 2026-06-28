@@ -1,16 +1,20 @@
 import type {
   Asset,
   JobProgress,
+  ParsedScene,
   ParsedScript,
   Project,
   RawScene,
   Scene,
+  SceneBreakdown,
   SceneRef,
   Shot,
 } from '@mediagen/types';
 import * as fs from '../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
 import { parseScriptAgentic } from './parseAgent.js';
+import { transformSceneAgentic } from './transformAgent.js';
+import { getAiConfig } from './settings.js';
 import { segmentScreenplay } from '../lib/screenplay.js';
 import { jobQueue } from '../jobs/queue.js';
 import { newId, slugify } from '../lib/ids.js';
@@ -84,6 +88,179 @@ export async function listRawScenes(projectId: string): Promise<RawScene[]> {
   const files = await fs.listNickelFiles(dir);
   const scenes = await Promise.all(files.map((f) => fs.readNickel<RawScene>(f)));
   return scenes.sort((a, b) => a.number - b.number);
+}
+
+// ─── Per-scene transform (raw scene → shots) ──────────────────────────────────
+//
+// The creative step, scoped to ONE scene: incremental, reviewable and cheap to
+// re-run. Produces candidate breakdowns; selecting one merges it into the
+// production scene (preserving shot ids + takes), leaving the raw scene intact.
+
+const transformJobRef = (projectId: string, n: number): string => `film-transform:${projectId}:${n}`;
+
+/** Build the continuity/cast context for transforming scene `number`. */
+async function sceneTransformContext(project: Project, number: number) {
+  const cast = Object.values(project.assets)
+    .filter((a) => a.role === 'character-concept')
+    .map((a) => ({ id: a.id, name: a.characterName ?? a.id, description: a.description ?? '' }));
+  const locations = Object.values(project.assets)
+    .filter((a) => a.role === 'location')
+    .map((a) => ({ id: a.id, name: a.characterName ?? a.id, description: a.description ?? '' }));
+  const read = async (n: number): Promise<RawScene | null> => {
+    const f = fs.rawSceneFile(project.id, n);
+    return (await fs.pathExists(f)) ? fs.readNickel<RawScene>(f) : null;
+  };
+  const prevRaw = await read(number - 1);
+  const nextRaw = await read(number + 1);
+  return {
+    cast,
+    locations,
+    prev: prevRaw ? { heading: prevRaw.heading, text: prevRaw.text } : undefined,
+    next: nextRaw ? { heading: nextRaw.heading } : undefined,
+  };
+}
+
+/** Kick off a per-scene transform job; persists a SceneBreakdown candidate when done. */
+export async function startSceneTransform(projectId: string, number: number): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  const rawFile = fs.rawSceneFile(projectId, number);
+  if (!(await fs.pathExists(rawFile))) throw notFound('Raw scene');
+  const rawScene = await fs.readNickel<RawScene>(rawFile);
+  const ctx = await sceneTransformContext(project, number);
+  const { parseModel } = await getAiConfig();
+  return jobQueue.start(
+    'scene-transform',
+    async (handle) => {
+      const scene = await transformSceneAgentic(project, rawScene, ctx, handle.signal, handle.update);
+      const id = newId('bd');
+      const breakdown: SceneBreakdown = {
+        id,
+        sceneNumber: number,
+        createdAt: new Date().toISOString(),
+        model: parseModel,
+        scene,
+      };
+      await fs.writeNickel(fs.sceneBreakdownFile(projectId, number, id), breakdown);
+      handle.update(1, `Pronto: ${scene.shots.length} shots`);
+    },
+    transformJobRef(projectId, number),
+  );
+}
+
+/** Cancel an in-flight scene transform, if any. */
+export async function cancelSceneTransform(projectId: string, number: number): Promise<boolean> {
+  await getProject(projectId);
+  const job = jobQueue.findActiveByRef(transformJobRef(projectId, number));
+  return job ? jobQueue.cancel(job.id) : false;
+}
+
+/** The candidate breakdowns for a scene, newest first, with the selected id. */
+export async function listSceneBreakdowns(
+  projectId: string,
+  number: number,
+): Promise<{ breakdowns: SceneBreakdown[]; selectedId: string | null }> {
+  await getProject(projectId);
+  const dir = fs.sceneBreakdownsDir(projectId, number);
+  if (!(await fs.pathExists(dir))) return { breakdowns: [], selectedId: null };
+  const files = (await fs.listNickelFiles(dir)).filter((f) => !f.endsWith('selected.txt'));
+  const breakdowns = await Promise.all(files.map((f) => fs.readNickel<SceneBreakdown>(f)));
+  breakdowns.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  const selFile = fs.sceneBreakdownSelectedFile(projectId, number);
+  const selectedId = (await fs.pathExists(selFile)) ? (await fs.readText(selFile)).trim() || null : null;
+  return { breakdowns, selectedId };
+}
+
+/** Apply a chosen breakdown to the production scene (merge; raw scene untouched). */
+export async function selectSceneBreakdown(
+  projectId: string,
+  number: number,
+  breakdownId: string,
+): Promise<Scene> {
+  await getProject(projectId);
+  const file = fs.sceneBreakdownFile(projectId, number, breakdownId);
+  if (!(await fs.pathExists(file))) throw notFound('Scene breakdown');
+  const breakdown = await fs.readNickel<SceneBreakdown>(file);
+  const scene = await applyParsedScene(projectId, breakdown.scene);
+  await fs.writeText(fs.sceneBreakdownSelectedFile(projectId, number), breakdownId);
+  await fs.commitProject(projectId, `cena ${number}: breakdown aplicado (${breakdown.scene.shots.length} shots)`);
+  return scene;
+}
+
+/**
+ * Merge a single ParsedScene into the project's production scenes, by scene
+ * number and shot order — preserving existing shot ids and their takes. Creates
+ * the scene if absent. Reuses the same merge rules as applyParsedScript.
+ */
+export async function applyParsedScene(projectId: string, ps: ParsedScene): Promise<Scene> {
+  const project = await getProject(projectId);
+  // Valid ref targets: character-concept and location asset ids (== their slug).
+  const refIds = new Set(
+    Object.values(project.assets)
+      .filter((a) => a.role === 'character-concept' || a.role === 'location')
+      .map((a) => a.id),
+  );
+  const shotRefs = (shot: ParsedScene['shots'][number]): Shot['refs'] =>
+    (shot.characterIds ?? [])
+      .map((cid) => slugify(cid))
+      .filter((id) => refIds.has(id))
+      .map((assetId) => ({ assetId, required: true }));
+
+  const existingRef = project.scenes.find((r) => r.number === ps.number);
+  let existing: Scene | null = null;
+  if (existingRef && (await fs.pathExists(fs.sceneFile(projectId, existingRef.id)))) {
+    existing = await fs.readNickel<Scene>(fs.sceneFile(projectId, existingRef.id));
+  }
+
+  const buildShot = (shot: ParsedScene['shots'][number], prev?: Shot): Shot => ({
+    id: prev?.id ?? newId('shot'),
+    order: shot.order,
+    targetDuration: shot.targetDuration || prev?.targetDuration || '15s',
+    camera: shot.camera,
+    action: shot.action,
+    exit: shot.exit,
+    diegeticTexts: shot.diegeticTexts ?? [],
+    sounds: shot.sounds ?? [],
+    lines: shot.lines ?? [],
+    refs: shotRefs(shot),
+    selectedTakeId: prev?.selectedTakeId ?? null,
+    takes: prev?.takes ?? [],
+  });
+
+  let scene: Scene;
+  if (existing) {
+    const byOrder = new Map(existing.shots.map((s) => [s.order, s]));
+    const parsedOrders = new Set(ps.shots.map((s) => s.order));
+    const merged = ps.shots.map((s) => buildShot(s, byOrder.get(s.order)));
+    for (const s of existing.shots) if (!parsedOrders.has(s.order)) merged.push(s);
+    merged.sort((a, b) => a.order - b.order);
+    scene = {
+      ...existing,
+      shortTitle: ps.shortTitle || existing.shortTitle,
+      slugTitle: ps.slugTitle || existing.slugTitle,
+      summary: ps.summary || existing.summary,
+      continuity: { in: ps.continuityIn, out: ps.continuityOut },
+      shots: merged,
+    };
+  } else {
+    const id = `scene-${ps.number}-${slugify(ps.shortTitle).slice(0, 24)}-${newId().slice(0, 4)}`;
+    scene = {
+      id,
+      number: ps.number,
+      shortTitle: ps.shortTitle || `Cena ${ps.number}`,
+      slugTitle: ps.slugTitle ?? '',
+      targetDuration: '',
+      summary: ps.summary ?? '',
+      continuity: { in: ps.continuityIn ?? '', out: ps.continuityOut ?? '' },
+      refs: [],
+      shots: ps.shots.map((s) => buildShot(s)),
+    };
+  }
+  await fs.writeNickel(fs.sceneFile(projectId, scene.id), scene);
+  const ref: SceneRef = { id: scene.id, number: scene.number, shortTitle: scene.shortTitle, file: `scenes/${scene.id}.ncl` };
+  const others = project.scenes.filter((r) => r.number !== scene.number);
+  project.scenes = [...others, ref].sort((a, b) => a.number - b.number);
+  await saveProject(project);
+  return scene;
 }
 
 /** The last parsed-but-not-yet-applied script, or null if none is pending. */

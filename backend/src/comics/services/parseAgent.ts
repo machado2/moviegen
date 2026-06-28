@@ -8,6 +8,7 @@
 
 import type {
   ParsedComicsCharacter,
+  ParsedComicsLocation,
   ParsedComicsScript,
   ParsedPrancha,
   ParsedQuadro,
@@ -42,6 +43,7 @@ const SYSTEM = `Você é um assistente de pré-produção de HQs / graphic novel
 Procedimento:
 1. Chame set_metadata uma vez (title, language, globalStyle).
 2. Chame add_character para cada personagem (id = slug minúsculo, estável; description com aparência canônica: idade, etnia, figurino, postura).
+   Chame também add_location para cada lugar/cenário recorrente (id = slug minúsculo) com a aparência canônica do local (sem personagens).
 3. Para cada prancha em ordem: chame add_prancha (escolhendo o layout adequado ao número de quadros), depois add_quadro para cada quadro dela.
    - Escolha o layout pelo nº de quadros da prancha: 1 -> "rows-1", 2 -> "rows-2", 3 -> "rows-3", 4 -> "rows-4" ou "grid-2x2", 6 -> "grid-2x3", 8 -> "grid-2x4", 5 -> "top-then-grid-2x2". O formato/proporção de cada quadro é derivado automaticamente do layout — você não escolhe.
    - Preserve os textos do roteiro VERBATIM, com acentuação e pontuação EXATAS; tipifique cada um.
@@ -90,6 +92,28 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
         }
         onStep(`Personagem: ${name || slug}`);
         return `ok: personagem ${name || slug}`;
+      },
+    }),
+    add_location: tool({
+      description: 'Adiciona um lugar/cenário recorrente como referência reutilizável. id é um slug minúsculo, estável.',
+      inputSchema: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        description: z
+          .string()
+          .optional()
+          .describe('aparência canônica do lugar: arquitetura, iluminação, atmosfera, época — sem personagens'),
+      }),
+      execute: async ({ id, name, description }) => {
+        const slug = id.trim();
+        if (!slug) return 'erro: id obrigatório';
+        b.result.locations ??= [];
+        if (!b.result.locations.some((l) => l.id === slug)) {
+          const location: ParsedComicsLocation = { id: slug, name: name || slug, description: description ?? '' };
+          b.result.locations.push(location);
+        }
+        onStep(`Lugar: ${name || slug}`);
+        return `ok: lugar ${name || slug}`;
       },
     }),
     add_prancha: tool({
@@ -186,7 +210,7 @@ export async function parseComicsScriptAgentic(
   await assertUnderCap(dir, spendCapUsd);
 
   const b: Builder = {
-    result: { title: '', language: project.language, globalStyle: '', characters: [], pranchas: [] },
+    result: { title: '', language: project.language, globalStyle: '', characters: [], locations: [], pranchas: [] },
     pranchaByNum: new Map(),
     quadroCount: 0,
   };

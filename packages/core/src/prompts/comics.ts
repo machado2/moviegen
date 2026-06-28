@@ -23,6 +23,24 @@ export function comicsCharacterPrompt(
     .join('\n');
 }
 
+/** The deterministic reference-image prompt for a comics location/setting. */
+export function comicsLocationPrompt(
+  project: Pick<ComicsProject, 'title' | 'globalStyle'>,
+  asset: Pick<ComicsAsset, 'characterName' | 'characterDescription' | 'description' | 'id'>,
+): string {
+  const name = asset.characterName ?? asset.id;
+  const desc = asset.characterDescription ?? asset.description ?? '';
+  return [
+    `Imagem de referência de cenário para a graphic novel "${project.title}".`,
+    `Cenário: ${dot(name)}`,
+    desc ? `Descrição: ${dot(desc)}` : '',
+    project.globalStyle ? `Estilo visual (use só as pistas visuais): ${dot(project.globalStyle)}` : '',
+    'Gere uma vista ampla e limpa do local, sem personagens.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function formatQuadroText(t: QuadroText): string {
   const speaker = t.speaker ?? 'personagem';
   switch (t.type) {

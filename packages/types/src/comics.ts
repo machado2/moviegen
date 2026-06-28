@@ -159,6 +159,7 @@ export interface ParsedComicsScript {
   language: string;
   globalStyle: string;
   characters: ParsedComicsCharacter[];
+  locations?: ParsedComicsLocation[];  // recurring settings → location reference assets
   pranchas: ParsedPrancha[];
 }
 
@@ -166,6 +167,12 @@ export interface ParsedComicsCharacter {
   id: string;
   name: string;
   description: string;
+}
+
+export interface ParsedComicsLocation {
+  id: string;
+  name: string;
+  description: string;       // canonical visual look of the place
 }
 
 export interface ParsedPrancha {

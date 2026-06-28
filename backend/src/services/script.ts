@@ -174,6 +174,27 @@ export async function applyParsedScript(projectId: string, parsed: ParsedScript)
     conceptIdByChar.set(charSlug, conceptId);
   }
 
+  // Location reference assets (merge: keep generated media, refresh description).
+  for (const loc of parsed.locations ?? []) {
+    const locId = slugify(loc.id || loc.name);
+    const existing = project.assets[locId];
+    if (existing) {
+      existing.characterName = loc.name;
+      existing.description = loc.description;
+    } else {
+      project.assets[locId] = {
+        id: locId,
+        type: 'image',
+        role: 'location',
+        status: 'pending',
+        file: null,
+        prompt: 'Reference image for {ref}.',
+        characterName: loc.name,
+        description: loc.description,
+      };
+    }
+  }
+
   // Map the parsed shot's character ids to asset refs.
   const shotRefs = (shot: ParsedScript['scenes'][number]['shots'][number]): Shot['refs'] =>
     (shot.characterIds ?? [])

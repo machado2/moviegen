@@ -4,6 +4,7 @@ title: 'Transform por cena (cena crua → shots), sob demanda e revisável'
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:48'
+updated_date: '2026-06-28 01:50'
 labels:
   - pipeline
   - backend
@@ -30,3 +31,14 @@ Deve: ser disparável por cena (gatilho no Pipeline/Cenas/Estúdio — decisão 
 - [ ] #3 A transformação recebe contexto (elenco/lugares + cenas vizinhas) para continuidade
 - [ ] #4 Suporta candidatos de breakdown da cena (vários resultados a escolher)
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Serviço transformScene(projectId, sceneNumber, {model?}): lê a cena crua (scenes-raw/<n>.ncl) + elenco/lugares do projeto + cabeçalhos/resumos das cenas vizinhas (n-1,n+1) para continuidade; roda um agente/prompt focado 'cena→shots' (reaproveita blocos do parseAgent) produzindo um ParsedScene de UMA cena.
+2. Aplica mesclando na Scene derivada reaproveitando a lógica de merge por 'order' do applyParsedScript (extrair helper mergeSceneShots) — preserva ids de shot e takes; cria a Scene se não existir.
+3. Candidatos de breakdown: persistir scene-breakdowns/<n>/<id>.ncl (vários resultados); selecionar aplica à Scene de produção (reusa filosofia de variantes). 
+4. Roda como job (LLM) com ref por cena; endpoints POST /projects/:id/scenes/:number/transform, GET candidatos, POST selecionar.
+5. Frontend: ação 'Transformar cena' em Cenas (lista cenas cruas + botão + candidatos). Mínimo viável primeiro.
+6. Não toca a cena crua; re-rodar é barato. Aditivo: o parse one-shot atual continua funcionando.
+<!-- SECTION:PLAN:END -->

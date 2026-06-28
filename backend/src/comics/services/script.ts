@@ -125,6 +125,26 @@ export async function applyParsedComicsScript(
     assetIdByChar.set(charSlug, charSlug);
   }
 
+  // Location reference assets (merge: keep generated media, refresh description).
+  for (const loc of parsed.locations ?? []) {
+    const locId = slugify(loc.id || loc.name);
+    const existing = project.assets[locId];
+    if (existing) {
+      existing.characterName = loc.name;
+      existing.characterDescription = loc.description;
+    } else {
+      project.assets[locId] = {
+        id: locId,
+        type: 'image',
+        role: 'location',
+        status: 'pending',
+        characterName: loc.name,
+        characterDescription: loc.description,
+        file: null,
+      };
+    }
+  }
+
   const mapCharacters = (q: ParsedComicsScript['pranchas'][number]['quadros'][number]): string[] =>
     (q.characterIds ?? [])
       .map((cid) => assetIdByChar.get(slugify(cid)))

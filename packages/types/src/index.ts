@@ -183,6 +183,7 @@ export interface ParsedScript {
   language: string;
   globalStyle: string;
   characters: ParsedCharacter[];
+  locations?: ParsedLocation[];  // recurring places → location reference assets
   scenes: ParsedScene[];
 }
 
@@ -191,6 +192,12 @@ export interface ParsedCharacter {
   name: string;
   description: string;
   voiceDescription: string;  // for TTS prompt generation
+}
+
+export interface ParsedLocation {
+  id: string;
+  name: string;
+  description: string;       // canonical visual look: architecture, lighting, mood, era
 }
 
 export interface ParsedScene {

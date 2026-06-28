@@ -44,6 +44,7 @@ const SYSTEM = `You are a film pre-production assistant. You convert a markdown 
 Procedure:
 1. Call set_metadata once (title, language, globalStyle).
 2. Call add_character for every character (id = lowercase slug, stable).
+   Also call add_location for every recurring place/setting (id = lowercase slug) with a vivid, reusable visual description of the location itself (no characters).
 3. For each scene in order: call add_scene, then add_shot for each of its shots.
    - Break scenes into shots of AT MOST 15 seconds; each shot is one camera idea.
    - Reference characters in a shot via characterIds (their slugs).
@@ -90,6 +91,28 @@ function buildTools(b: Builder, onStep: (msg: string) => void) {
         }
         onStep(`Personagem: ${name || slug}`);
         return `ok: personagem ${name || slug}`;
+      },
+    }),
+    add_location: tool({
+      description:
+        'Add one recurring location/setting as a reusable reference. id is a lowercase slug, stable.',
+      inputSchema: z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        description: z
+          .string()
+          .optional()
+          .describe('canonical visual look: architecture, lighting, mood, era — no characters'),
+      }),
+      execute: async ({ id, name, description }) => {
+        const slug = id.trim();
+        if (!slug) return 'erro: id obrigatório';
+        b.result.locations ??= [];
+        if (!b.result.locations.some((l) => l.id === slug)) {
+          b.result.locations.push({ id: slug, name: name || slug, description: description ?? '' });
+        }
+        onStep(`Lugar: ${name || slug}`);
+        return `ok: lugar ${name || slug}`;
       },
     }),
     add_scene: tool({
@@ -193,7 +216,7 @@ export async function parseScriptAgentic(
   await assertUnderCap(dir, spendCapUsd);
 
   const b: Builder = {
-    result: { title: '', language: project.language, globalStyle: '', characters: [], scenes: [] },
+    result: { title: '', language: project.language, globalStyle: '', characters: [], locations: [], scenes: [] },
     sceneByNum: new Map(),
     shotCount: 0,
   };

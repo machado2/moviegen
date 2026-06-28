@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JobProgress, Prancha, Scene } from '@mediagen/types';
 import { api } from '@/api/client';
 import { comicsApi } from '@/api/comicsClient';
-import { comicsCharacterPrompt, filmReferencePrompt, shotPrompt } from '@mediagen/core';
+import { comicsCharacterPrompt, comicsLocationPrompt, filmReferencePrompt, shotPrompt } from '@mediagen/core';
 import type { StudioAttachment, StudioItem } from '@/lib/studio';
 
 /**
@@ -251,14 +251,15 @@ export function useComicsStudioItems(projectId: string, onChanged: () => void): 
     const out: StudioItem[] = [];
 
     for (const asset of Object.values(fresh.assets)) {
-      if (asset.role !== 'character') continue;
+      if (asset.role !== 'character' && asset.role !== 'location') continue;
+      const isLocation = asset.role === 'location';
       const done = Boolean(asset.file);
-      const charPrompt = comicsCharacterPrompt(fresh, asset);
+      const charPrompt = isLocation ? comicsLocationPrompt(fresh, asset) : comicsCharacterPrompt(fresh, asset);
       out.push({
-        key: `char:${asset.id}`,
-        kind: 'character',
+        key: `${isLocation ? 'loc' : 'char'}:${asset.id}`,
+        kind: isLocation ? 'location' : 'character',
         label: asset.characterName ?? asset.id,
-        sublabel: 'Personagem',
+        sublabel: isLocation ? 'Cenário' : 'Personagem',
         accepts: 'image',
         done,
         skipped: asset.skipped ?? false,

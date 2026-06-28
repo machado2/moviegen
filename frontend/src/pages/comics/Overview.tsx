@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { StringList } from '@/components/StringList';
 import { ScriptUpload } from '@/components/ScriptUpload';
+import { ComicsRawScenesPanel } from '@/components/comics/RawScenesPanel';
 import { useSettings } from '@/hooks/useSettings';
 import { comicsApi, ComicsApiError } from '@/api/comicsClient';
 
@@ -268,6 +269,8 @@ export function Overview({ project, onChanged }: OverviewProps) {
           </p>
         </CardContent>
       </Card>
+
+      <ComicsRawScenesPanel projectId={project.id} onApplied={onChanged} />
 
       <Dialog open={confirmParse} onOpenChange={setConfirmParse}>
         <DialogContent>

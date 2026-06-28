@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
   ComicsProjectDTO,
+  PageRender,
   PranchaLayout,
+  PranchaRenderMode,
   Quadro,
   QuadroSlotFormat,
   Render,
 } from '@mediagen/types';
 import { QUADRO_COUNT_BY_LAYOUT } from '@mediagen/types';
-import { Plus } from 'lucide-react';
+import { Eye, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -63,6 +65,8 @@ export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [activeQuadroId, setActiveQuadroId] = useState<string | null>(null);
+  const [modeSaving, setModeSaving] = useState(false);
+  const [pageGenerating, setPageGenerating] = useState(false);
 
   // progress map keyed by pranchaId -> quadros with selected render / total
   const [progress, setProgress] = useState<
@@ -132,7 +136,7 @@ export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
 
   // Render viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [viewerRender, setViewerRender] = useState<Render | null>(null);
+  const [viewerRender, setViewerRender] = useState<Render | PageRender | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
 
   const viewRender = (quadro: Quadro, renderId: string) => {
@@ -143,6 +147,47 @@ export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
       comicsApi.renders.imageUrl(projectId, selectedId, quadro.id, renderId),
     );
     setViewerOpen(true);
+  };
+
+  const viewPageRender = (render: PageRender) => {
+    if (!selectedId) return;
+    setViewerRender(render);
+    setViewerUrl(comicsApi.renders.pageImageUrl(projectId, selectedId, render.id));
+    setViewerOpen(true);
+  };
+
+  const setRenderMode = async (renderMode: PranchaRenderMode) => {
+    if (!prancha || prancha.renderMode === renderMode) return;
+    setModeSaving(true);
+    try {
+      await comicsApi.pranchas.update(projectId, prancha.id, { renderMode });
+      await reloadPrancha();
+      await reloadList();
+    } finally {
+      setModeSaving(false);
+    }
+  };
+
+  const generatePageRender = async () => {
+    if (!prancha) return;
+    setPageGenerating(true);
+    try {
+      const { jobId } = await comicsApi.renders.generatePage(projectId, prancha.id);
+      await new Promise<void>((resolve, reject) => {
+        comicsApi.assembly.subscribeJob(
+          projectId,
+          jobId,
+          (p) => {
+            if (p.status === 'done') resolve();
+            else if (p.status === 'error') reject(new Error(p.error ?? 'Falha ao gerar prancha'));
+          },
+          () => reject(new Error('Conexão de progresso perdida. A geração pode continuar rodando.')),
+        );
+      });
+      await reloadPrancha();
+    } finally {
+      setPageGenerating(false);
+    }
   };
 
   const sortedQuadros = useMemo(
@@ -239,6 +284,7 @@ export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
                   #{prancha.number} {prancha.shortTitle}
                 </h2>
                 <Badge variant="outline">{prancha.layout}</Badge>
+                <Badge variant="outline">{prancha.renderMode === 'page' ? 'página inteira' : 'painéis'}</Badge>
                 <Badge variant="secondary">
                   {prancha.quadros.filter((q) => q.selectedRenderId).length}/
                   {prancha.quadros.length} renders selecionados
@@ -249,7 +295,80 @@ export function Pranchas({ project, studioItems, onGenerate }: PranchasProps) {
                   {prancha.origin}
                 </p>
               )}
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <Button
+                  size="sm"
+                  variant={prancha.renderMode === 'panels' || !prancha.renderMode ? 'secondary' : 'outline'}
+                  disabled={modeSaving}
+                  onClick={() => void setRenderMode('panels')}
+                >
+                  Painéis
+                </Button>
+                <Button
+                  size="sm"
+                  variant={prancha.renderMode === 'page' ? 'secondary' : 'outline'}
+                  disabled={modeSaving}
+                  onClick={() => void setRenderMode('page')}
+                >
+                  Página inteira
+                </Button>
+                {modeSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
             </div>
+
+            {prancha.renderMode === 'page' && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">
+                    Candidatos de página <span className="font-normal text-muted-foreground">· {prancha.pageRenders?.length ?? 0}</span>
+                  </h3>
+                  <Button size="sm" variant="outline" disabled={pageGenerating} onClick={() => void generatePageRender()}>
+                    {pageGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                    Gerar página
+                  </Button>
+                </div>
+                {(prancha.pageRenders ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Gere uma página inteira para usar este modo.</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {(prancha.pageRenders ?? []).map((r) => (
+                      <li key={r.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs">
+                        <span className="min-w-0 truncate text-muted-foreground">
+                          {r.id.slice(0, 12)} · {r.generationModel ?? r.source}
+                          {prancha.selectedPageRenderId === r.id && ' · selecionado'}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => viewPageRender(r)} title="Ver">
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={prancha.selectedPageRenderId === r.id ? 'secondary' : 'outline'}
+                            onClick={async () => {
+                              await comicsApi.renders.selectPage(projectId, prancha.id, r.id);
+                              await reloadPrancha();
+                            }}
+                          >
+                            {prancha.selectedPageRenderId === r.id ? 'Em uso' : 'Usar'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={async () => {
+                              await comicsApi.renders.removePage(projectId, prancha.id, r.id);
+                              await reloadPrancha();
+                            }}
+                            title="Remover"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {jobList.length > 0 && (
               <div className="space-y-2">

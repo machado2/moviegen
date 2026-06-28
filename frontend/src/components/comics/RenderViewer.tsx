@@ -1,4 +1,4 @@
-import type { Render } from '@mediagen/types';
+import type { PageRender, Render } from '@mediagen/types';
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 export interface RenderViewerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  render: Render | null;
+  render: Render | PageRender | null;
   imageUrl: string | null;
 }
 

@@ -1,4 +1,4 @@
-import type { Prancha, PranchaLayout, PranchaRef, Quadro } from '@mediagen/types';
+import type { Prancha, PranchaLayout, PranchaRef, PranchaRenderMode, Quadro } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
@@ -64,6 +64,7 @@ export interface CreatePranchaInput {
   shortTitle: string;
   origin?: string;
   layout: PranchaLayout;
+  renderMode?: PranchaRenderMode;
   autoQuadros?: boolean; // default true: pre-create the layout's quadros
 }
 
@@ -78,6 +79,9 @@ export async function createPrancha(projectId: string, input: CreatePranchaInput
     shortTitle: input.shortTitle,
     origin: input.origin ?? '',
     layout: input.layout,
+    renderMode: input.renderMode ?? 'panels',
+    selectedPageRenderId: null,
+    pageRenders: [],
     quadros: Array.from({ length: count }, (_, i) => emptyQuadro(input.layout, i)),
   };
   const saved = await savePrancha(projectId, prancha);
@@ -90,6 +94,7 @@ export interface UpdatePranchaInput {
   shortTitle?: string;
   origin?: string;
   layout?: PranchaLayout;
+  renderMode?: PranchaRenderMode;
 }
 
 export async function updatePrancha(
@@ -101,6 +106,7 @@ export async function updatePrancha(
   if (patch.number !== undefined) prancha.number = patch.number;
   if (patch.shortTitle !== undefined) prancha.shortTitle = patch.shortTitle;
   if (patch.origin !== undefined) prancha.origin = patch.origin;
+  if (patch.renderMode !== undefined) prancha.renderMode = patch.renderMode;
   if (patch.layout !== undefined) {
     prancha.layout = patch.layout;
     // Re-derive slot formats; renders are preserved (additive, never destroyed).

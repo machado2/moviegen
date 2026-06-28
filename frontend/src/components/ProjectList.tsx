@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { BookOpen, Film, Plus, Upload } from 'lucide-react';
+import { BookOpen, Film, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 import type { AllProjectSummary } from '@mediagen/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -22,11 +23,14 @@ interface ProjectListProps {
 }
 
 export function ProjectList({ onSelect }: ProjectListProps) {
-  const { projects, loading, reload } = useAllProjects();
+  const { projects, loading, error, reload } = useAllProjects();
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<'film' | 'comics'>('film');
   const [creating, setCreating] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<AllProjectSummary | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importType, setImportType] = useState<'film' | 'comics'>('film');
@@ -68,6 +72,31 @@ export function ProjectList({ onSelect }: ProjectListProps) {
     }
   };
 
+  const requestDelete = (project: AllProjectSummary) => {
+    setProjectToDelete(project);
+    setDeleteError(null);
+  };
+
+  const deleteProject = async () => {
+    if (!projectToDelete) return;
+    const project = projectToDelete;
+    setDeletingId(project.id);
+    setDeleteError(null);
+    try {
+      if (project.type === 'film') {
+        await api.projects.remove(project.id);
+      } else {
+        await comicsApi.projects.remove(project.id);
+      }
+      await reload();
+      setProjectToDelete(null);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
@@ -83,6 +112,7 @@ export function ProjectList({ onSelect }: ProjectListProps) {
       </div>
 
       {loading && <p className="text-muted-foreground text-sm">Carregando…</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {!loading && projects.length === 0 && (
         <p className="text-muted-foreground text-sm">
@@ -92,7 +122,13 @@ export function ProjectList({ onSelect }: ProjectListProps) {
 
       <ul className="space-y-2">
         {projects.map((p) => (
-          <ProjectRow key={p.id} project={p} onSelect={onSelect} />
+          <ProjectRow
+            key={p.id}
+            project={p}
+            deleting={deletingId === p.id}
+            onSelect={onSelect}
+            onDelete={requestDelete}
+          />
         ))}
       </ul>
 
@@ -199,28 +235,89 @@ export function ProjectList({ onSelect }: ProjectListProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={projectToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingId) {
+            setProjectToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir projeto</DialogTitle>
+            <DialogDescription>
+              Esta ação remove permanentemente “{projectToDelete?.title}”.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setProjectToDelete(null);
+                setDeleteError(null);
+              }}
+              disabled={!!deletingId}
+            >
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={() => void deleteProject()} disabled={!!deletingId}>
+              {deletingId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deletingId ? 'Excluindo…' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function ProjectRow({ project, onSelect }: { project: AllProjectSummary; onSelect: ProjectListProps['onSelect'] }) {
+function ProjectRow({
+  project,
+  deleting,
+  onSelect,
+  onDelete,
+}: {
+  project: AllProjectSummary;
+  deleting: boolean;
+  onSelect: ProjectListProps['onSelect'];
+  onDelete: (project: AllProjectSummary) => void;
+}) {
   const Icon = project.type === 'film' ? Film : BookOpen;
   const date = new Date(project.updatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
 
   return (
     <li>
-      <button
-        type="button"
-        onClick={() => onSelect({ id: project.id, type: project.type })}
-        className="flex w-full items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-colors hover:bg-muted"
-      >
-        <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
-        <span className="flex-1 font-medium">{project.title}</span>
-        <Badge variant="outline" className="shrink-0 text-xs">
-          {project.type === 'film' ? 'Filme' : 'HQ'}
-        </Badge>
-        <span className="shrink-0 text-xs text-muted-foreground">{date}</span>
-      </button>
+      <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 transition-colors hover:bg-muted">
+        <button
+          type="button"
+          onClick={() => onSelect({ id: project.id, type: project.type })}
+          disabled={deleting}
+          className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left disabled:pointer-events-none disabled:opacity-60"
+        >
+          <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate font-medium">{project.title}</span>
+          <Badge variant="outline" className="shrink-0 text-xs">
+            {project.type === 'film' ? 'Filme' : 'HQ'}
+          </Badge>
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{date}</span>
+        </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
+          title={`Excluir ${project.title}`}
+          aria-label={`Excluir ${project.title}`}
+          disabled={deleting}
+          onClick={() => onDelete(project)}
+        >
+          {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        </Button>
+      </div>
     </li>
   );
 }

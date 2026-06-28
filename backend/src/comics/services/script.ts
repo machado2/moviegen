@@ -1,19 +1,25 @@
 import type {
+  ComicsSceneBreakdown,
   ComicsAsset,
   ComicsProject,
   ParsedComicsScript,
+  ParsedPrancha,
   Prancha,
   PranchaRef,
   Quadro,
+  RawScene,
 } from '@mediagen/types';
 import type { JobProgress } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
 import { parseComicsScriptAgentic } from './parseAgent.js';
+import { transformComicsSceneAgentic } from './transformAgent.js';
+import { getAiConfig } from '../../services/settings.js';
 import { jobQueue } from '../../jobs/queue.js';
 import { newId, slugify } from '../../lib/ids.js';
 import { badRequest, notFound } from '../../lib/errors.js';
+import { segmentScreenplay } from '../../lib/screenplay.js';
 import { slotFormatFor } from '../layout.js';
 import { validateComicsProject, validatePrancha } from '../validate.js';
 
@@ -60,6 +66,232 @@ export async function cancelScriptParse(projectId: string): Promise<boolean> {
 export async function getActiveParseJob(projectId: string): Promise<JobProgress | null> {
   await getProject(projectId);
   return jobQueue.findActiveByRef(parseJobRef(projectId)) ?? null;
+}
+
+// ─── Raw scenes (source layer) ────────────────────────────────────────────────
+
+/** Extract (or re-extract) faithful raw narrative scenes from the stored script. */
+export async function extractRawScenes(projectId: string): Promise<RawScene[]> {
+  await getProject(projectId);
+  if (!(await fs.pathExists(cfs.scriptFile(projectId)))) throw notFound('Stored screenplay');
+  const markdown = await fs.readText(cfs.scriptFile(projectId));
+  const scenes = segmentScreenplay(markdown, 'script.md');
+  await fs.remove(cfs.rawScenesDir(projectId));
+  for (const scene of scenes) {
+    await fs.writeNickel(cfs.rawSceneFile(projectId, scene.number), scene);
+  }
+  await cfs.commitProject(projectId, `cenas cruas de HQ extraídas: ${scenes.length}`);
+  return scenes;
+}
+
+/** List persisted raw scenes in script order. */
+export async function listRawScenes(projectId: string): Promise<RawScene[]> {
+  await getProject(projectId);
+  const dir = cfs.rawScenesDir(projectId);
+  if (!(await fs.pathExists(dir))) return [];
+  const files = await fs.listNickelFiles(dir);
+  const scenes = await Promise.all(files.map((f) => fs.readNickel<RawScene>(f)));
+  return scenes.sort((a, b) => a.number - b.number);
+}
+
+// ─── Per-scene transform (raw scene → pranchas/quadros) ──────────────────────
+
+const transformJobRef = (projectId: string, n: number): string => `comics-transform:${projectId}:${n}`;
+const sceneOriginPrefix = (n: number): string => `scene-raw:${n}:`;
+const sceneOrigin = (sceneNumber: number, localPranchaNumber: number): string =>
+  `${sceneOriginPrefix(sceneNumber)}${localPranchaNumber}`;
+
+function localPranchaNumber(origin: string, sceneNumber: number): number | null {
+  const prefix = sceneOriginPrefix(sceneNumber);
+  if (!origin.startsWith(prefix)) return null;
+  const n = Number(origin.slice(prefix.length));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function comicsSceneTransformContext(project: ComicsProject, number: number) {
+  const cast = Object.values(project.assets)
+    .filter((a) => a.role === 'character')
+    .map((a) => ({ id: a.id, name: a.characterName ?? a.id, description: a.characterDescription ?? a.description ?? '' }));
+  const locations = Object.values(project.assets)
+    .filter((a) => a.role === 'location')
+    .map((a) => ({ id: a.id, name: a.characterName ?? a.id, description: a.characterDescription ?? a.description ?? '' }));
+  const read = async (n: number): Promise<RawScene | null> => {
+    const f = cfs.rawSceneFile(project.id, n);
+    return (await fs.pathExists(f)) ? fs.readNickel<RawScene>(f) : null;
+  };
+  const prevRaw = await read(number - 1);
+  const nextRaw = await read(number + 1);
+  return {
+    cast,
+    locations,
+    prev: prevRaw ? { heading: prevRaw.heading, text: prevRaw.text } : undefined,
+    next: nextRaw ? { heading: nextRaw.heading } : undefined,
+  };
+}
+
+/** Kick off a per-scene HQ transform job; persists one candidate breakdown. */
+export async function startSceneTransform(projectId: string, number: number): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  const rawFile = cfs.rawSceneFile(projectId, number);
+  if (!(await fs.pathExists(rawFile))) throw notFound('Raw scene');
+  const rawScene = await fs.readNickel<RawScene>(rawFile);
+  const ctx = await comicsSceneTransformContext(project, number);
+  const { parseModel } = await getAiConfig();
+  return jobQueue.start(
+    'scene-transform',
+    async (handle) => {
+      const pranchas = await transformComicsSceneAgentic(project, rawScene, ctx, handle.signal, handle.update);
+      const id = newId('bd');
+      const breakdown: ComicsSceneBreakdown = {
+        id,
+        sceneNumber: number,
+        createdAt: new Date().toISOString(),
+        model: parseModel,
+        pranchas,
+      };
+      await fs.writeNickel(cfs.sceneBreakdownFile(projectId, number, id), breakdown);
+      const quadroCount = pranchas.reduce((sum, p) => sum + p.quadros.length, 0);
+      handle.update(1, `Pronto: ${pranchas.length} pranchas · ${quadroCount} quadros`);
+    },
+    transformJobRef(projectId, number),
+  );
+}
+
+export async function cancelSceneTransform(projectId: string, number: number): Promise<boolean> {
+  await getProject(projectId);
+  const job = jobQueue.findActiveByRef(transformJobRef(projectId, number));
+  return job ? jobQueue.cancel(job.id) : false;
+}
+
+export async function listSceneBreakdowns(
+  projectId: string,
+  number: number,
+): Promise<{ breakdowns: ComicsSceneBreakdown[]; selectedId: string | null }> {
+  await getProject(projectId);
+  const dir = cfs.sceneBreakdownsDir(projectId, number);
+  if (!(await fs.pathExists(dir))) return { breakdowns: [], selectedId: null };
+  const files = (await fs.listNickelFiles(dir)).filter((f) => !f.endsWith('selected.txt'));
+  const breakdowns = await Promise.all(files.map((f) => fs.readNickel<ComicsSceneBreakdown>(f)));
+  breakdowns.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  const selFile = cfs.sceneBreakdownSelectedFile(projectId, number);
+  const selectedId = (await fs.pathExists(selFile)) ? (await fs.readText(selFile)).trim() || null : null;
+  return { breakdowns, selectedId };
+}
+
+export async function selectSceneBreakdown(
+  projectId: string,
+  number: number,
+  breakdownId: string,
+): Promise<PranchaRef[]> {
+  await getProject(projectId);
+  const file = cfs.sceneBreakdownFile(projectId, number, breakdownId);
+  if (!(await fs.pathExists(file))) throw notFound('Scene breakdown');
+  const breakdown = await fs.readNickel<ComicsSceneBreakdown>(file);
+  await applyComicsSceneBreakdown(projectId, breakdown.sceneNumber, breakdown.pranchas);
+  await fs.writeText(cfs.sceneBreakdownSelectedFile(projectId, number), breakdownId);
+  await cfs.commitProject(projectId, `cena HQ ${number}: breakdown aplicado (${breakdown.pranchas.length} pranchas)`);
+  return listPranchaRefsFromProject(projectId);
+}
+
+async function listPranchaRefsFromProject(projectId: string): Promise<PranchaRef[]> {
+  const project = await getProject(projectId);
+  return [...project.pranchas].sort((a, b) => a.number - b.number);
+}
+
+async function applyComicsSceneBreakdown(
+  projectId: string,
+  sceneNumber: number,
+  parsedPranchas: ParsedPrancha[],
+): Promise<void> {
+  const project = await getProject(projectId);
+  const assetIds = new Set(Object.keys(project.assets));
+  const existingScenePranchas = new Map<number, Prancha>();
+  const keepOtherRefs: PranchaRef[] = [];
+
+  for (const ref of project.pranchas) {
+    const file = cfs.pranchaFile(projectId, ref.id);
+    if (!(await fs.pathExists(file))) continue;
+    const prancha = await fs.readNickel<Prancha>(file);
+    const local = localPranchaNumber(prancha.origin, sceneNumber);
+    if (local == null) keepOtherRefs.push(ref);
+    else existingScenePranchas.set(local, prancha);
+  }
+
+  const sceneRefs: PranchaRef[] = [];
+  for (let i = 0; i < parsedPranchas.length; i++) {
+    const pp = parsedPranchas[i]!;
+    const local = i + 1;
+    const existing = existingScenePranchas.get(local);
+    const existingByOrder = new Map((existing?.quadros ?? []).map((q) => [q.order, q]));
+    const quadros: Quadro[] = pp.quadros.map((q, qi) => {
+      const order = qi + 1;
+      const prev = existingByOrder.get(order);
+      return {
+        id: prev?.id ?? newId('quadro'),
+        order,
+        slotFormat: slotFormatFor(pp.layout, qi),
+        composition: q.composition,
+        characters: (q.characterIds ?? []).map(slugify).filter((id) => assetIds.has(id)),
+        setting: q.setting,
+        texts: q.texts ?? [],
+        restrictions: q.restrictions ?? [],
+        refs: prev?.refs ?? [],
+        skipped: prev?.skipped,
+        queuePriority: prev?.queuePriority,
+        selectedRenderId: prev?.selectedRenderId ?? null,
+        renders: prev?.renders ?? [],
+      };
+    });
+    const id = existing?.id ?? `prancha-scene-${sceneNumber}-${local}-${slugify(pp.shortTitle).slice(0, 20)}-${newId().slice(0, 4)}`;
+    const prancha: Prancha = {
+      ...existing,
+      id,
+      number: existing?.number ?? 0,
+      shortTitle: pp.shortTitle || `Cena ${sceneNumber}.${local}`,
+      origin: sceneOrigin(sceneNumber, local),
+      layout: pp.layout,
+      renderMode: existing?.renderMode ?? 'panels',
+      selectedPageRenderId: existing?.selectedPageRenderId ?? null,
+      pageRenders: existing?.pageRenders ?? [],
+      quadros,
+    };
+    await fs.writeNickel(cfs.pranchaFile(projectId, id), prancha);
+    sceneRefs.push({ id, number: 0, shortTitle: prancha.shortTitle, file: `pranchas/${id}.ncl` });
+  }
+
+  project.pranchas = await renumberPranchas(projectId, [...keepOtherRefs, ...sceneRefs]);
+  await saveProject(project);
+}
+
+async function renumberPranchas(projectId: string, refs: PranchaRef[]): Promise<PranchaRef[]> {
+  const loaded: { ref: PranchaRef; prancha: Prancha; scene: number; local: number }[] = [];
+  for (const ref of refs) {
+    const file = cfs.pranchaFile(projectId, ref.id);
+    if (!(await fs.pathExists(file))) continue;
+    const prancha = await fs.readNickel<Prancha>(file);
+    const m = /^scene-raw:(\d+):(\d+)$/.exec(prancha.origin);
+    loaded.push({
+      ref,
+      prancha,
+      scene: m ? Number(m[1]) : Number.MAX_SAFE_INTEGER,
+      local: m ? Number(m[2]) : prancha.number,
+    });
+  }
+  loaded.sort((a, b) => a.scene - b.scene || a.local - b.local || a.prancha.number - b.prancha.number);
+  const nextRefs: PranchaRef[] = [];
+  for (let i = 0; i < loaded.length; i++) {
+    const item = loaded[i]!;
+    const number = i + 1;
+    item.prancha.number = number;
+    await fs.writeNickel(cfs.pranchaFile(projectId, item.prancha.id), item.prancha);
+    nextRefs.push({
+      id: item.prancha.id,
+      number,
+      shortTitle: item.prancha.shortTitle,
+      file: `pranchas/${item.prancha.id}.ncl`,
+    });
+  }
+  return nextRefs;
 }
 
 /** The last parsed-but-not-yet-applied script, or null if none is pending. */

@@ -1,4 +1,4 @@
-import type { Render } from '@mediagen/types';
+import type { PageRender, Render } from '@mediagen/types';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getPrancha, savePrancha } from './prancha.js';
@@ -121,4 +121,92 @@ export async function selectRender(
   quadro.selectedRenderId = renderId;
   await savePrancha(projectId, prancha);
   await cfs.commitProject(projectId, `seleção de render: prancha ${prancha.number} · quadro ${quadro.order}`);
+}
+
+export async function listPageRenders(projectId: string, pranchaId: string): Promise<PageRender[]> {
+  const prancha = await getPrancha(projectId, pranchaId);
+  return prancha.pageRenders ?? [];
+}
+
+export interface AddPageRenderInput {
+  data: Buffer;
+  originalName: string;
+  source: 'generated' | 'upload';
+  generationPrompt?: string;
+  generationModel?: string;
+  notes?: string;
+  autoSelect?: boolean;
+}
+
+export async function addPageRender(
+  projectId: string,
+  pranchaId: string,
+  input: AddPageRenderInput,
+): Promise<PageRender> {
+  const prancha = await getPrancha(projectId, pranchaId);
+  const renderId = newId('page');
+  const filename = cfs.pageRenderFilename(renderId, input.originalName);
+  const absPath = cfs.pranchaPageRenderFile(projectId, pranchaId, filename);
+  await fs.writeBuffer(absPath, input.data);
+
+  let widthPx: number | null = null;
+  let heightPx: number | null = null;
+  try {
+    ({ widthPx, heightPx } = await probeImage(absPath));
+  } catch {
+    /* best-effort */
+  }
+
+  const render: PageRender = {
+    id: renderId,
+    createdAt: nowIso(),
+    filename,
+    fileSizeBytes: input.data.byteLength,
+    widthPx,
+    heightPx,
+    source: input.source,
+    generationPrompt: input.generationPrompt,
+    generationModel: input.generationModel,
+    notes: input.notes,
+  };
+  prancha.pageRenders ??= [];
+  prancha.pageRenders.push(render);
+  if (input.autoSelect !== false && !prancha.selectedPageRenderId) prancha.selectedPageRenderId = render.id;
+  await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `render de página: prancha ${prancha.number}`);
+  return render;
+}
+
+export async function getPageRenderAbsolutePath(
+  projectId: string,
+  pranchaId: string,
+  renderId: string,
+): Promise<{ path: string; render: PageRender }> {
+  const prancha = await getPrancha(projectId, pranchaId);
+  const render = (prancha.pageRenders ?? []).find((r) => r.id === renderId);
+  if (!render) throw notFound('Page render');
+  return { path: cfs.pranchaPageRenderFile(projectId, pranchaId, render.filename), render };
+}
+
+export async function deletePageRender(projectId: string, pranchaId: string, renderId: string): Promise<void> {
+  const prancha = await getPrancha(projectId, pranchaId);
+  const render = (prancha.pageRenders ?? []).find((r) => r.id === renderId);
+  if (!render) throw notFound('Page render');
+  prancha.pageRenders = (prancha.pageRenders ?? []).filter((r) => r.id !== renderId);
+  if (prancha.selectedPageRenderId === renderId) {
+    prancha.selectedPageRenderId = prancha.pageRenders[0]?.id ?? null;
+  }
+  await savePrancha(projectId, prancha);
+  await fs.remove(cfs.pranchaPageRenderFile(projectId, pranchaId, render.filename));
+  await cfs.commitProject(projectId, `render de página removido: prancha ${prancha.number}`);
+}
+
+export async function selectPageRender(projectId: string, pranchaId: string, renderId: string | null): Promise<void> {
+  const prancha = await getPrancha(projectId, pranchaId);
+  if (renderId !== null && !(prancha.pageRenders ?? []).some((r) => r.id === renderId)) {
+    throw badRequest('No such page render on this prancha');
+  }
+  prancha.selectedPageRenderId = renderId;
+  await savePrancha(projectId, prancha);
+  await cfs.commitProject(projectId, `seleção de render de página: prancha ${prancha.number}`);
 }

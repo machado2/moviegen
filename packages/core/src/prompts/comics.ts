@@ -97,10 +97,10 @@ Composição do quadro: ${quadro.composition}
 
 A proporção e orientação do quadro devem obedecer ao formato indicado acima. Mantenha balões, legendas, placas e onomatopeias dentro de uma área segura, afastados das bordas do quadro.
 
-Textos do quadro, literalmente:
+Textos estruturados que serão aplicados depois por lettering programático:
 ${textLines}
 
-Observação de lettering: quando uma linha indicar quem fala, essa identificação é apenas instrução de produção. Dentro do balão, legenda, placa ou onomatopeia, escreva somente o texto entre aspas.
+Observação de lettering: NÃO desenhe letras, balões, legendas, placas nem onomatopeias na imagem. Reserve áreas limpas e legíveis para esses textos, que serão compostos depois por montagem programática.
 
 Personagens:
 ${characters}
@@ -109,11 +109,45 @@ Cenário e estilo: ${quadro.setting}. ${project.globalStyle}
 
 Montagem: o quadro deve preencher todo o retângulo da imagem, sem moldura externa desenhada, sem borda própria e sem margem branca ao redor. Os gutters da página serão criados depois por montagem programática.
 
-Restrições de texto: os textos listados devem estar legíveis em português, com acentos e pontuação corretos.
+Restrições de texto: não gere texto visual, pseudo-letras, marcas d'água ou balões preenchidos. Apenas deixe espaço visual para o lettering.
 ${restrictionsBlock}`.trimEnd();
 }
 
 /** The asset ids attached as images to the generation call (characters + refs). */
 export function quadroAttachmentIds(quadro: Quadro): string[] {
   return Array.from(new Set([...quadro.characters, ...quadro.refs]));
+}
+
+/** Prompt for the opt-in full-page render mode. Text is baked in this mode. */
+export function pranchaPagePrompt(project: ComicsProject, prancha: Prancha): string {
+  const quadros = [...prancha.quadros]
+    .sort((a, b) => a.order - b.order)
+    .map((q) => {
+      const texts = q.texts.length ? q.texts.map(formatQuadroText).join('; ') : 'sem texto';
+      return [
+        `Quadro ${q.order}: ${q.composition}`,
+        `Cenário: ${q.setting}`,
+        `Textos: ${texts}`,
+      ].join('\n');
+    })
+    .join('\n\n');
+  const restrictionsBlock =
+    project.restrictions.length > 0 ? `\nRestrições:\n${project.restrictions.map((r) => `- ${r}`).join('\n')}\n` : '';
+
+  return `Caso de uso: ilustração narrativa
+Tipo de imagem: prancha inteira de HQ / graphic novel, proporção 2:3, layout ${prancha.layout}
+
+Pedido principal: Crie a prancha ${prancha.number} completa da graphic novel "${project.title}". A imagem final deve ser uma página pronta para publicação, com composição coesa, gutters/painéis orgânicos quando necessário e lettering embutido.
+
+Estrutura da prancha:
+${quadros}
+
+Estilo global: ${project.globalStyle}
+
+Textos: escreva os textos literalmente em português, com acentos e pontuação corretos. Quando houver indicação de fala, o nome do personagem é instrução de produção; dentro do balão escreva só o texto.
+${restrictionsBlock}`.trimEnd();
+}
+
+export function pranchaAttachmentIds(prancha: Prancha): string[] {
+  return Array.from(new Set(prancha.quadros.flatMap((q) => [...q.characters, ...q.refs])));
 }

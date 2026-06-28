@@ -21,6 +21,25 @@ export function scriptFile(projectId: string): string {
 export function parsedScriptFile(projectId: string): string {
   return path.join(projectDir(projectId), 'parsed-script.ncl');
 }
+// Raw narrative scenes: faithful segmentation of the source script, shared with
+// the film RawScene shape. Pranchas are derived later and can be regenerated.
+export function rawScenesDir(projectId: string): string {
+  return path.join(projectDir(projectId), 'scenes-raw');
+}
+export function rawSceneFile(projectId: string, number: number): string {
+  return path.join(rawScenesDir(projectId), `${number}.ncl`);
+}
+// Per-scene transform candidates. The numbers inside each candidate are local to
+// that scene; global prancha numbers are derived when candidates are applied.
+export function sceneBreakdownsDir(projectId: string, number: number): string {
+  return path.join(projectDir(projectId), 'scene-breakdowns', String(number));
+}
+export function sceneBreakdownFile(projectId: string, number: number, id: string): string {
+  return path.join(sceneBreakdownsDir(projectId, number), `${id}.ncl`);
+}
+export function sceneBreakdownSelectedFile(projectId: string, number: number): string {
+  return path.join(sceneBreakdownsDir(projectId, number), 'selected.txt');
+}
 export function pranchasDir(projectId: string): string {
   return path.join(projectDir(projectId), 'pranchas');
 }
@@ -44,8 +63,17 @@ export function assetRelPath(assetId: string, variantId: string | null, original
 export function renderFilename(renderId: string, originalName: string): string {
   return `${renderId}.${safeExt(originalName, 'png')}`;
 }
+export function pageRenderFilename(renderId: string, originalName: string): string {
+  return `${renderId}.${safeExt(originalName, 'png')}`;
+}
 export function pranchaRendersDir(projectId: string, pranchaId: string): string {
   return path.join(projectDir(projectId), 'renders', pranchaId);
+}
+export function pranchaPageRendersDir(projectId: string, pranchaId: string): string {
+  return path.join(projectDir(projectId), 'page-renders', pranchaId);
+}
+export function pranchaPageRenderFile(projectId: string, pranchaId: string, filename: string): string {
+  return path.join(pranchaPageRendersDir(projectId, pranchaId), filename);
 }
 export function rendersDir(projectId: string, pranchaId: string, quadroId: string): string {
   return path.join(projectDir(projectId), 'renders', pranchaId, quadroId);

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fsp from 'node:fs/promises';
-import type { MontagemOptions, PranchaLayout } from '@mediagen/types';
+import type { MontagemOptions, PranchaLayout, QuadroText } from '@mediagen/types';
 import { PYTHON_BIN } from '../../config.js';
 import { ensureDir } from '../../storage/filesystem.js';
 
@@ -14,6 +14,7 @@ export interface MontageSpec extends MontagemOptions {
   layout: PranchaLayout;
   renders: string[];   // ordered absolute render paths
   output: string;      // absolute output PNG path
+  lettering?: { order: number; texts: QuadroText[] }[];
 }
 
 /** Compose one prancha PNG from its selected renders using the Pillow script. */

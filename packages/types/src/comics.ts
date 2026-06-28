@@ -80,8 +80,13 @@ export interface Prancha {
   shortTitle: string;  // matches PranchaRef.shortTitle
   origin: string;      // reference to the script: "roteiro/ato_um.md · PRANCHA 14"
   layout: PranchaLayout;
+  renderMode?: PranchaRenderMode; // default 'panels': quadros + montage; 'page': one full-page render
+  selectedPageRenderId?: string | null;
+  pageRenders?: PageRender[];
   quadros: Quadro[];
 }
+
+export type PranchaRenderMode = 'panels' | 'page';
 
 // ─── Quadros ──────────────────────────────────────────────────────────────────
 
@@ -142,6 +147,19 @@ export interface Render {
   notes?: string;
 }
 
+export interface PageRender {
+  id: string;
+  createdAt: string;           // ISO 8601
+  filename: string;            // relative path under the prancha's page-renders/ directory
+  fileSizeBytes: number;
+  widthPx: number | null;
+  heightPx: number | null;
+  source: 'generated' | 'upload';
+  generationPrompt?: string;
+  generationModel?: string;
+  notes?: string;
+}
+
 // ─── Characters ───────────────────────────────────────────────────────────────
 
 // Derived view — computed from assets, not stored separately.
@@ -181,6 +199,17 @@ export interface ParsedPrancha {
   origin: string;
   layout: PranchaLayout;
   quadros: ParsedQuadro[];
+}
+
+// One candidate breakdown of a raw narrative scene into one or more local
+// pranchas. ParsedPrancha.number is local to the scene candidate, not a global
+// page number; production Prancha.number is derived after applying candidates.
+export interface ComicsSceneBreakdown {
+  id: string;
+  sceneNumber: number;
+  createdAt: string;       // ISO 8601
+  model: string;
+  pranchas: ParsedPrancha[];
 }
 
 export interface ParsedQuadro {
@@ -225,6 +254,7 @@ export interface PranchaAssemblyStatus {
   number: number;
   shortTitle: string;
   layout: PranchaLayout;
+  renderMode: PranchaRenderMode;
   quadroCount: number;
   quadrosWithRender: number;
   ready: boolean;            // all quadros have a selected render

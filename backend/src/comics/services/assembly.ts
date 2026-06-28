@@ -4,15 +4,18 @@ import type {
   JobProgress,
   MontagemOptions,
   Prancha,
+  PageRender,
   PranchaAssemblyStatus,
 } from '@mediagen/types';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import * as cfs from '../storage.js';
 import * as fs from '../../storage/filesystem.js';
 import { getProject } from './project.js';
 import { addAssetVariant, getAsset } from './asset.js';
 import { getPrancha, listPranchaRefs } from './prancha.js';
-import { addRender } from './render.js';
-import { comicsCharacterPrompt, quadroAttachmentIds, quadroPrompt } from '@mediagen/core';
+import { addPageRender, addRender } from './render.js';
+import { comicsCharacterPrompt, pranchaAttachmentIds, pranchaPagePrompt, quadroAttachmentIds, quadroPrompt } from '@mediagen/core';
 import { generateFrame } from './ai.js';
 import { generateImageViaGateway } from '../../services/imagegen.js';
 import { getAiConfig } from '../../services/settings.js';
@@ -50,11 +53,32 @@ async function selectedRenderPaths(
   return { paths, missing, newestInputMs };
 }
 
+async function selectedPageRenderPath(
+  projectId: string,
+  prancha: Prancha,
+): Promise<{ path: string | null; render: PageRender | null; newestInputMs: number }> {
+  let newestInputMs = 0;
+  const pStat = await fs.statFile(cfs.pranchaFile(projectId, prancha.id));
+  if (pStat) newestInputMs = Math.max(newestInputMs, pStat.mtime.getTime());
+  const render = prancha.selectedPageRenderId
+    ? (prancha.pageRenders ?? []).find((r) => r.id === prancha.selectedPageRenderId) ?? null
+    : null;
+  if (!render) return { path: null, render: null, newestInputMs };
+  const p = cfs.pranchaPageRenderFile(projectId, prancha.id, render.filename);
+  const st = await fs.statFile(p);
+  if (st) newestInputMs = Math.max(newestInputMs, st.mtime.getTime());
+  return { path: p, render, newestInputMs };
+}
+
 export async function pranchaStatus(projectId: string, pranchaId: string): Promise<PranchaAssemblyStatus> {
   const prancha = await getPrancha(projectId, pranchaId);
-  const { missing, newestInputMs } = await selectedRenderPaths(projectId, prancha);
-  const quadrosWithRender = prancha.quadros.length - missing.length;
-  const ready = prancha.quadros.length > 0 && missing.length === 0;
+  const renderMode = prancha.renderMode ?? 'panels';
+  const panelState = renderMode === 'panels' ? await selectedRenderPaths(projectId, prancha) : null;
+  const pageState = renderMode === 'page' ? await selectedPageRenderPath(projectId, prancha) : null;
+  const missing = panelState?.missing ?? (pageState?.render ? [] : [0]);
+  const newestInputMs = panelState?.newestInputMs ?? pageState?.newestInputMs ?? 0;
+  const quadrosWithRender = renderMode === 'panels' ? prancha.quadros.length - missing.length : pageState?.render ? 1 : 0;
+  const ready = renderMode === 'panels' ? prancha.quadros.length > 0 && missing.length === 0 : Boolean(pageState?.render);
   const outStat = await fs.statFile(cfs.pranchaOutputFile(projectId, pranchaId));
   let state: PranchaAssemblyStatus['state'] = 'not-assembled';
   if (outStat) state = outStat.mtime.getTime() >= newestInputMs ? 'assembled' : 'stale';
@@ -63,6 +87,7 @@ export async function pranchaStatus(projectId: string, pranchaId: string): Promi
     number: prancha.number,
     shortTitle: prancha.shortTitle,
     layout: prancha.layout,
+    renderMode,
     quadroCount: prancha.quadros.length,
     quadrosWithRender,
     ready,
@@ -95,18 +120,30 @@ export async function startPranchaAssembly(
 ): Promise<JobProgress> {
   const prancha = await getPrancha(projectId, pranchaId);
   if (prancha.quadros.length === 0) throw badRequest('Prancha has no quadros');
-  const { paths, missing } = await selectedRenderPaths(projectId, prancha);
-  if (missing.length) {
-    throw badRequest(
-      `Cannot assemble: ${missing.length} quadro(s) have no selected render`,
-      missing.map((o) => `quadro order ${o}`),
-    );
-  }
+  const renderMode = prancha.renderMode ?? 'panels';
   const opts: MontagemOptions = { ...MONTAGEM_DEFAULTS, ...options };
   const output = cfs.pranchaOutputFile(projectId, pranchaId);
   return jobQueue.start('prancha-assembly', async (handle) => {
     handle.update(0.1, 'Composing page…');
-    await montagePrancha({ ...opts, layout: prancha.layout, renders: paths, output });
+    if (renderMode === 'page') {
+      const { path: pagePath } = await selectedPageRenderPath(projectId, prancha);
+      if (!pagePath) throw badRequest('Cannot assemble: prancha has no selected page render');
+      await fs.ensureDir(path.dirname(output));
+      await fsp.copyFile(pagePath, output);
+    } else {
+      const { paths, missing } = await selectedRenderPaths(projectId, prancha);
+      if (missing.length) {
+        throw badRequest(
+          `Cannot assemble: ${missing.length} quadro(s) have no selected render`,
+          missing.map((o) => `quadro order ${o}`),
+        );
+      }
+      const lettering = prancha.quadros
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((q) => ({ order: q.order, texts: q.texts ?? [] }));
+      await montagePrancha({ ...opts, layout: prancha.layout, renders: paths, output, lettering });
+    }
     await cfs.commitProject(projectId, `montagem: prancha ${prancha.number} · ${prancha.shortTitle}`);
     handle.update(1, 'Page assembled');
   });
@@ -230,6 +267,63 @@ export async function startRenderGeneration(
       autoSelect: false,
     });
     handle.update(1, 'Render gerado');
+  });
+}
+
+export async function startPageRenderGeneration(
+  projectId: string,
+  pranchaId: string,
+  opts: RenderGenerationOptions = {},
+): Promise<JobProgress> {
+  const project = await getProject(projectId);
+  const prancha = await getPrancha(projectId, pranchaId);
+  const prompt = pranchaPagePrompt(project, prancha);
+  const attachmentPaths: string[] = [];
+  for (const assetId of pranchaAttachmentIds(prancha)) {
+    const asset = project.assets[assetId];
+    if (asset?.file) attachmentPaths.push(cfs.resolveInProject(projectId, asset.file));
+  }
+
+  const dir = cfs.projectDir(projectId);
+  if (opts.useCodex) {
+    return jobQueue.start('render-generate', async (handle) => {
+      handle.update(0.1, 'Gerando prancha inteira via codex (local)…');
+      const { png } = await generateFrame(prompt, attachmentPaths);
+      handle.update(0.85, 'Salvando candidato…');
+      await addPageRender(projectId, pranchaId, {
+        data: png,
+        originalName: 'page.png',
+        source: 'generated',
+        generationPrompt: prompt,
+        generationModel: 'codex',
+        autoSelect: false,
+      });
+      handle.update(1, 'Prancha gerada');
+    });
+  }
+
+  const { apiKey, spendCapUsd, imageModels } = await getAiConfig();
+  const model = opts.model || imageModels[0];
+  if (!model) {
+    throw badRequest('Nenhum modelo de imagem configurado. Adicione um id de modelo em Configurações.');
+  }
+  return jobQueue.start('render-generate', async (handle) => {
+    handle.update(0.1, `Gerando prancha inteira via ${model}…`);
+    const { png } = await withSpendGuard(dir, spendCapUsd, async () => {
+      const result = await generateImageViaGateway({ apiKey, model, prompt, attachmentPaths });
+      await recordSpend(dir, result.spend);
+      return result;
+    });
+    handle.update(0.85, 'Salvando candidato…');
+    await addPageRender(projectId, pranchaId, {
+      data: png,
+      originalName: 'page.png',
+      source: 'generated',
+      generationPrompt: prompt,
+      generationModel: model,
+      autoSelect: false,
+    });
+    handle.update(1, 'Prancha gerada');
   });
 }
 

@@ -149,6 +149,7 @@ export function Publication({ projectId }: PublicationProps) {
               <tr>
                 <th className="p-2">#</th>
                 <th className="p-2">Título</th>
+                <th className="p-2">Modo</th>
                 <th className="p-2">Renders</th>
                 <th className="p-2">Status</th>
                 <th className="p-2">Ações</th>
@@ -159,9 +160,10 @@ export function Publication({ projectId }: PublicationProps) {
                 <tr key={p.pranchaId} className="border-b last:border-0">
                   <td className="p-2">{p.number}</td>
                   <td className="p-2">{p.shortTitle}</td>
+                  <td className="p-2">{p.renderMode === 'page' ? 'página' : 'painéis'}</td>
                   <td className="p-2">
-                    {p.quadrosWithRender}/{p.quadroCount}
-                    {!p.ready && p.missingQuadros.length > 0 && (
+                    {p.renderMode === 'page' ? (p.ready ? '1/1' : '0/1') : `${p.quadrosWithRender}/${p.quadroCount}`}
+                    {p.renderMode === 'panels' && !p.ready && p.missingQuadros.length > 0 && (
                       <span className="ml-1 text-xs text-destructive">
                         (faltam: {p.missingQuadros.join(', ')})
                       </span>
@@ -200,7 +202,7 @@ export function Publication({ projectId }: PublicationProps) {
               {pranchas.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="p-4 text-center text-muted-foreground"
                   >
                     Nenhuma prancha para montar.

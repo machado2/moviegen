@@ -3,16 +3,19 @@ id: TASK-38
 title: >-
   Pipeline de produção em etapas (extração → cena crua → transform por cena →
   render)
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@codex'
 created_date: '2026-06-27 23:47'
-updated_date: '2026-06-28 17:46'
+updated_date: '2026-06-28 18:51'
 labels:
   - pipeline
   - architecture
   - design
   - backend
 dependencies: []
+modified_files:
+  - docs/pipeline.md
 priority: medium
 ordinal: 47000
 ---
@@ -40,13 +43,21 @@ Esta é a tarefa-mãe; as subtarefas implementam em fatias finas (filme primeiro
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Desenho registrado em docs/ (ex.: docs/pipeline.md ou seção em docs/ARCHITECTURE.md) com o DAG de etapas e o invariante por unidade
-- [ ] #2 As 3 decisões em aberto resolvidas e refletidas nas subtarefas
-- [ ] #3 Subtarefas criadas cobrindo: extração+cena crua, lugares, transform por cena (filme), nível de cena + transform (HQ), modo de render de HQ, lettering
+- [x] #1 Desenho registrado em docs/ (ex.: docs/pipeline.md ou seção em docs/ARCHITECTURE.md) com o DAG de etapas e o invariante por unidade
+- [x] #2 As 3 decisões em aberto resolvidas e refletidas nas subtarefas
+- [x] #3 Subtarefas criadas cobrindo: extração+cena crua, lugares, transform por cena (filme), nível de cena + transform (HQ), modo de render de HQ, lettering
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Decisões resolvidas: (1) HQ NÃO usa número de página em lugar nenhum — paginação só na montagem final da revista; (2) modo de render padrão 'panels' + opt-in 'page'; (3) HQ inteira ADIADA por orientação do usuário — implementar só quando o pipeline de filme estiver pronto; até lá, no máximo testes descartáveis. Filme entregue: 38.1/38.2/38.3 (no ar).
+
+Completed the staged production pipeline across film and HQ. Film slices were already delivered (38.1-38.3). This pass delivered HQ raw scenes, per-scene transform candidates, panels/page render modes, programmatic lettering for panels, and docs/pipeline.md with the DAG and decisions. Validation passed: pnpm typecheck; pnpm build; python3 -m py_compile backend/src/comics/assembly/montagem.py.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Finished the staged pipeline parent: source raw scenes, per-scene transforms, mode-aware HQ rendering, programmatic panel lettering, and documentation. Verified with typecheck, build, and Python syntax check.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -10,6 +10,9 @@ import type {
   ComicsProjectSummary,
   JobProgress,
   MontagemOptions,
+  RawScene,
+  ComicsSceneBreakdown,
+  PageRender,
   ParsedComicsScript,
   Prancha,
   PranchaAssemblyStatus,
@@ -171,6 +174,21 @@ export const comicsScriptApi = {
   },
   cancelParse(projectId: string): Promise<{ cancelled: boolean }> {
     return request(`/projects/${projectId}/script/parse/cancel`, { method: 'POST' });
+  },
+  rawScenes(projectId: string): Promise<RawScene[]> {
+    return request(`/projects/${projectId}/script/raw-scenes`);
+  },
+  extractRawScenes(projectId: string): Promise<RawScene[]> {
+    return request(`/projects/${projectId}/script/raw-scenes`, { method: 'POST' });
+  },
+  transformScene(projectId: string, number: number): Promise<{ jobId: string }> {
+    return request(`/projects/${projectId}/scenes/${number}/transform`, { method: 'POST' });
+  },
+  breakdowns(projectId: string, number: number): Promise<{ breakdowns: ComicsSceneBreakdown[]; selectedId: string | null }> {
+    return request(`/projects/${projectId}/scenes/${number}/breakdowns`);
+  },
+  selectBreakdown(projectId: string, number: number, bid: string): Promise<unknown> {
+    return request(`/projects/${projectId}/scenes/${number}/breakdowns/${bid}/select`, { method: 'POST' });
   },
   apply(
     projectId: string,
@@ -392,6 +410,31 @@ export const comicsQuadrosApi = {
 // ─── Renders ─────────────────────────────────────────────────────────────────
 
 export const comicsRendersApi = {
+  listPage(projectId: string, pranchaId: string): Promise<PageRender[]> {
+    return request(`/projects/${projectId}/pranchas/${pranchaId}/page-renders`);
+  },
+  generatePage(
+    projectId: string,
+    pranchaId: string,
+    opts?: { model?: string; useCodex?: boolean },
+  ): Promise<{ jobId: string }> {
+    return request(`/projects/${projectId}/pranchas/${pranchaId}/page-renders/generate`, {
+      method: 'POST',
+      body: json(opts ?? {}),
+    });
+  },
+  pageImageUrl(projectId: string, pranchaId: string, renderId: string): string {
+    return `${BASE}/projects/${projectId}/pranchas/${pranchaId}/page-renders/${renderId}`;
+  },
+  removePage(projectId: string, pranchaId: string, renderId: string): Promise<void> {
+    return request(`/projects/${projectId}/pranchas/${pranchaId}/page-renders/${renderId}`, { method: 'DELETE' });
+  },
+  selectPage(projectId: string, pranchaId: string, renderId: string | null): Promise<unknown> {
+    return request(`/projects/${projectId}/pranchas/${pranchaId}/selected-page-render`, {
+      method: 'PUT',
+      body: json({ renderId }),
+    });
+  },
   list(
     projectId: string,
     pranchaId: string,

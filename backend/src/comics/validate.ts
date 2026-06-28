@@ -6,6 +6,7 @@ import type {
   ComicsAssetStatus,
   ComicsAssetType,
   PranchaLayout,
+  PranchaRenderMode,
   QuadroSlotFormat,
   QuadroTextType,
 } from '@mediagen/types';
@@ -42,6 +43,7 @@ const ASSET_STATUSES: readonly ComicsAssetStatus[] = ['active', 'pending', 'exte
 const LAYOUTS: readonly PranchaLayout[] = [
   'rows-1', 'rows-2', 'rows-3', 'rows-4', 'grid-2x2', 'grid-2x3', 'grid-2x4', 'top-then-grid-2x2',
 ];
+const RENDER_MODES: readonly PranchaRenderMode[] = ['panels', 'page'];
 const SLOT_FORMATS: readonly QuadroSlotFormat[] = [
   'vertical de página inteira, proporção 2:3',
   'horizontal alto, proporção 4:3',
@@ -102,6 +104,13 @@ export function validatePrancha(v: unknown, path = 'prancha'): Errors {
   str(v.shortTitle, `${path}.shortTitle`, e);
   str(v.origin, `${path}.origin`, e);
   oneOf(v.layout, LAYOUTS, `${path}.layout`, e);
+  if (v.renderMode !== undefined) oneOf(v.renderMode, RENDER_MODES, `${path}.renderMode`, e);
+  if (v.selectedPageRenderId !== undefined && v.selectedPageRenderId !== null) {
+    str(v.selectedPageRenderId, `${path}.selectedPageRenderId`, e);
+  }
+  if (v.pageRenders !== undefined && !Array.isArray(v.pageRenders)) {
+    e.push(`${path}.pageRenders: expected array`);
+  }
   if (!Array.isArray(v.quadros)) e.push(`${path}.quadros: expected array`);
   else v.quadros.forEach((q, i) => validateQuadro(q, `${path}.quadros[${i}]`, e));
   return e;

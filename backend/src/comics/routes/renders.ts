@@ -1,18 +1,63 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  deletePageRender,
   addRender,
   deleteRender,
+  getPageRenderAbsolutePath,
   getRenderAbsolutePath,
+  listPageRenders,
   listRenders,
+  selectPageRender,
   selectRender,
 } from '../services/render.js';
-import { startRenderGeneration } from '../services/assembly.js';
+import { startPageRenderGeneration, startRenderGeneration } from '../services/assembly.js';
 import { readUpload } from '../../lib/multipart.js';
 import { sendFileWithRange } from '../../lib/sendfile.js';
 
 type QuadroParams = { id: string; pranchaId: string; quadroId: string };
 
 export async function comicsRenderRoutes(app: FastifyInstance): Promise<void> {
+  app.get<{ Params: { id: string; pranchaId: string } }>(
+    '/projects/:id/pranchas/:pranchaId/page-renders',
+    async (req) => listPageRenders(req.params.id, req.params.pranchaId),
+  );
+
+  app.post<{ Params: { id: string; pranchaId: string }; Body: { model?: string; useCodex?: boolean } }>(
+    '/projects/:id/pranchas/:pranchaId/page-renders/generate',
+    async (req, reply) => {
+      const job = await startPageRenderGeneration(req.params.id, req.params.pranchaId, {
+        model: req.body?.model,
+        useCodex: req.body?.useCodex,
+      });
+      return reply.code(202).send({ jobId: job.id, ...job });
+    },
+  );
+
+  app.get<{ Params: { id: string; pranchaId: string; renderId: string } }>(
+    '/projects/:id/pranchas/:pranchaId/page-renders/:renderId',
+    async (req, reply) => {
+      const { path } = await getPageRenderAbsolutePath(req.params.id, req.params.pranchaId, req.params.renderId);
+      return sendFileWithRange(req, reply, path, 'image/png');
+    },
+  );
+
+  app.delete<{ Params: { id: string; pranchaId: string; renderId: string } }>(
+    '/projects/:id/pranchas/:pranchaId/page-renders/:renderId',
+    async (req, reply) => {
+      await deletePageRender(req.params.id, req.params.pranchaId, req.params.renderId);
+      return reply.code(204).send();
+    },
+  );
+
+  app.put<{ Params: { id: string; pranchaId: string }; Body: { renderId: string | null } }>(
+    '/projects/:id/pranchas/:pranchaId/selected-page-render',
+    async (req) => {
+      const renderId = req.body?.renderId ?? null;
+      await selectPageRender(req.params.id, req.params.pranchaId, renderId);
+      return { ok: true, selectedPageRenderId: renderId };
+    },
+  );
+
   app.get<{ Params: QuadroParams }>(
     '/projects/:id/pranchas/:pranchaId/quadros/:quadroId/renders',
     async (req) => listRenders(req.params.id, req.params.pranchaId, req.params.quadroId),

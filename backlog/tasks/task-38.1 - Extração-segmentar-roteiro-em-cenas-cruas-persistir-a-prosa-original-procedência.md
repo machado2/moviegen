@@ -6,7 +6,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-06-27 23:48'
-updated_date: '2026-06-28 00:15'
+updated_date: '2026-06-28 00:25'
 labels:
   - pipeline
   - backend
@@ -37,4 +37,6 @@ Escopo (filme primeiro): uma etapa/ferramenta de extração que produz uma lista
 
 <!-- SECTION:NOTES:BEGIN -->
 Camada scenes-raw/ (RawScene: number, heading, text verbatim, characterCues, source). Segmentador determinístico fiel em backend/src/lib/screenplay.ts (split por slug lines INT./EXT./EST./CENA; cues de personagem best-effort; sem LLM). Serviço extractRawScenes/listRawScenes (idempotente, commit por projeto). Endpoints POST/GET /projects/:id/script/raw-scenes. Smoke 9/9 na lógica. Aditivo: não altera o parse atual.
+
+Implementado: tipo RawScene (packages/types); segmentador determinístico fiel lib/screenplay.ts (split por cabeçalhos INT./EXT./EST./CENA, prosa verbatim, cues de personagem best-effort); camada de storage scenes-raw/<n>.ncl (filesystem.ts) + listNickelFiles; serviço extractRawScenes/listRawScenes (script.ts); endpoints POST/GET /projects/:id/script/raw-scenes. Smoke do segmentador 9/9. Não explode shots (separado da transformação — TASK-38.3).
 <!-- SECTION:NOTES:END -->

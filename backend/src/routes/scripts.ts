@@ -5,8 +5,10 @@ import { getProject, toDTO } from '../services/project.js';
 import {
   applyParsedScript,
   cancelScriptParse,
+  extractRawScenes,
   getActiveParseJob,
   getParsedScript,
+  listRawScenes,
   startScriptParse,
   structuredImport,
 } from '../services/script.js';
@@ -52,6 +54,15 @@ export async function scriptRoutes(app: FastifyInstance): Promise<void> {
     const cancelled = await cancelScriptParse(req.params.id);
     return { cancelled };
   });
+
+  // Raw scenes (source layer): faithful deterministic segmentation of the stored
+  // screenplay. POST extracts/re-extracts; GET lists them.
+  app.post<{ Params: { id: string } }>('/projects/:id/script/raw-scenes', async (req) =>
+    extractRawScenes(req.params.id),
+  );
+  app.get<{ Params: { id: string } }>('/projects/:id/script/raw-scenes', async (req) =>
+    listRawScenes(req.params.id),
+  );
 
   // The pending parsed-but-not-applied script, or null. Lets the UI restore the
   // review/apply step after a reload while a parse was in flight.

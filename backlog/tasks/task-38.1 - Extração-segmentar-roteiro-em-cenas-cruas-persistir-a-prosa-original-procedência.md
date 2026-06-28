@@ -3,9 +3,10 @@ id: TASK-38.1
 title: >-
   Extração: segmentar roteiro em cenas cruas + persistir a prosa original
   (procedência)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-06-27 23:48'
+updated_date: '2026-06-28 00:15'
 labels:
   - pipeline
   - backend
@@ -26,8 +27,14 @@ Escopo (filme primeiro): uma etapa/ferramenta de extração que produz uma lista
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Roteiro é segmentado em cenas cruas ordenadas, com a prosa original preservada verbatim
-- [ ] #2 Cena crua guarda número, cabeçalho/slug, texto original e personagens presentes
-- [ ] #3 Persistência define claramente o que é fonte (cru) vs derivado, com procedência rastreável
-- [ ] #4 A extração não explode shots (separada da transformação)
+- [x] #1 Roteiro é segmentado em cenas cruas ordenadas, com a prosa original preservada verbatim
+- [x] #2 Cena crua guarda número, cabeçalho/slug, texto original e personagens presentes
+- [x] #3 Persistência define claramente o que é fonte (cru) vs derivado, com procedência rastreável
+- [x] #4 A extração não explode shots (separada da transformação)
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Camada scenes-raw/ (RawScene: number, heading, text verbatim, characterCues, source). Segmentador determinístico fiel em backend/src/lib/screenplay.ts (split por slug lines INT./EXT./EST./CENA; cues de personagem best-effort; sem LLM). Serviço extractRawScenes/listRawScenes (idempotente, commit por projeto). Endpoints POST/GET /projects/:id/script/raw-scenes. Smoke 9/9 na lógica. Aditivo: não altera o parse atual.
+<!-- SECTION:NOTES:END -->

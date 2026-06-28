@@ -3,6 +3,7 @@ import type {
   JobProgress,
   ParsedScript,
   Project,
+  RawScene,
   Scene,
   SceneRef,
   Shot,
@@ -10,6 +11,7 @@ import type {
 import * as fs from '../storage/filesystem.js';
 import { getProject, saveProject } from './project.js';
 import { parseScriptAgentic } from './parseAgent.js';
+import { segmentScreenplay } from '../lib/screenplay.js';
 import { jobQueue } from '../jobs/queue.js';
 import { newId, slugify } from '../lib/ids.js';
 import { badRequest, notFound } from '../lib/errors.js';
@@ -51,6 +53,37 @@ export async function cancelScriptParse(projectId: string): Promise<boolean> {
   await getProject(projectId);
   const job = jobQueue.findActiveByRef(parseJobRef(projectId));
   return job ? jobQueue.cancel(job.id) : false;
+}
+
+// ─── Raw scenes (source layer) ────────────────────────────────────────────────
+//
+// Deterministic, faithful segmentation of the stored screenplay into raw scenes.
+// Cheap and re-runnable (no LLM); the production Scene→Shot structure is derived
+// from these by a separate per-scene transform.
+
+/** Extract (or re-extract) the raw scenes from the stored screenplay. */
+export async function extractRawScenes(projectId: string): Promise<RawScene[]> {
+  await getProject(projectId);
+  if (!(await fs.pathExists(fs.scriptFile(projectId)))) throw notFound('Stored screenplay');
+  const markdown = await fs.readText(fs.scriptFile(projectId));
+  const scenes = segmentScreenplay(markdown, 'script.md');
+  // Replace any previous extraction so re-running is idempotent.
+  await fs.remove(fs.rawScenesDir(projectId));
+  for (const scene of scenes) {
+    await fs.writeNickel(fs.rawSceneFile(projectId, scene.number), scene);
+  }
+  await fs.commitProject(projectId, `cenas cruas extraídas: ${scenes.length}`);
+  return scenes;
+}
+
+/** List the persisted raw scenes, in script order. */
+export async function listRawScenes(projectId: string): Promise<RawScene[]> {
+  await getProject(projectId);
+  const dir = fs.rawScenesDir(projectId);
+  if (!(await fs.pathExists(dir))) return [];
+  const files = await fs.listNickelFiles(dir);
+  const scenes = await Promise.all(files.map((f) => fs.readNickel<RawScene>(f)));
+  return scenes.sort((a, b) => a.number - b.number);
 }
 
 /** The last parsed-but-not-yet-applied script, or null if none is pending. */

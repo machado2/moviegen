@@ -160,6 +160,20 @@ export interface Character {
   voiceAssetId: string | null;
 }
 
+// ─── Raw scenes (source layer) ──────────────────────────────────────────────
+//
+// A faithful, near-mechanical segmentation of the original screenplay into
+// scenes, kept verbatim as the source of truth. The production structure
+// (Scene → Shot) is DERIVED from these by a separate per-scene transform, so a
+// re-transform never loses the original prose. Stored under scenes-raw/.
+export interface RawScene {
+  number: number;          // sequential, 1-based, in script order
+  heading: string;         // the scene heading / slug line, verbatim ("EXT. BREJO - DAWN")
+  text: string;            // the scene's prose, verbatim from the script
+  characterCues: string[]; // best-effort: dialogue cue names appearing in the scene
+  source: string;          // provenance: where this was extracted from (e.g. "script.md")
+}
+
 // ─── Script Import ────────────────────────────────────────────────────────────
 
 // Intermediate result of AI script parsing — what the LLM returns before

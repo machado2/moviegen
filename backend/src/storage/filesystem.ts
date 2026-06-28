@@ -39,6 +39,14 @@ export function scenesDir(projectId: string): string {
 export function sceneFile(projectId: string, sceneId: string): string {
   return path.join(scenesDir(projectId), `${sceneId}.ncl`);
 }
+// Raw (source) scenes: faithful segmentation of the original script, kept
+// separate from the derived production scenes so source vs derived is explicit.
+export function rawScenesDir(projectId: string): string {
+  return path.join(projectDir(projectId), 'scenes-raw');
+}
+export function rawSceneFile(projectId: string, number: number): string {
+  return path.join(rawScenesDir(projectId), `${number}.ncl`);
+}
 export function assetsDir(projectId: string): string {
   return path.join(projectDir(projectId), 'assets');
 }
@@ -127,6 +135,18 @@ export async function remove(target: string): Promise<void> {
 
 export async function listProjectIds(): Promise<string[]> {
   return repo.listDirs(PROJECTS_DIR);
+}
+
+/** Absolute paths of the .ncl files directly under a directory (unsorted). */
+export async function listNickelFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith('.ncl'))
+      .map((e) => path.join(dir, e.name));
+  } catch {
+    return [];
+  }
 }
 
 /** Stream helpers re-exported so routes don't import node:fs directly. */

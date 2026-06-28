@@ -4,6 +4,7 @@ title: 'HQ: introduzir o nível de ''cena'' + alocação global de páginas'
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:48'
+updated_date: '2026-06-28 17:45'
 labels:
   - pipeline
   - backend
@@ -29,3 +30,9 @@ Assimetria a resolver: no filme, shots são escopados dentro da cena (transforma
 - [ ] #2 Existe estratégia definida de alocação/numeração global de páginas ao transformar cenas fora de ordem
 - [ ] #3 A numeração de pranchas permanece consistente após transformar cenas em qualquer ordem
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+DECISÃO (usuário): NÃO usar número de página em lugar nenhum — a paginação (quais quadros caem em qual prancha) é determinada SÓ na montagem final da revista. Assim a 'numeração global de páginas' deixa de ser um problema: a camada de cena produz quadros/sequências sem número de prancha; pranchas/páginas são derivadas no fim. Reavaliar o uso atual de prancha.number à luz disso quando implementar. ADIADO por orientação do usuário (não implementar HQ agora).
+<!-- SECTION:NOTES:END -->

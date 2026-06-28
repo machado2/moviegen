@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:47'
+updated_date: '2026-06-28 17:46'
 labels:
   - pipeline
   - architecture
@@ -43,3 +44,9 @@ Esta é a tarefa-mãe; as subtarefas implementam em fatias finas (filme primeiro
 - [ ] #2 As 3 decisões em aberto resolvidas e refletidas nas subtarefas
 - [ ] #3 Subtarefas criadas cobrindo: extração+cena crua, lugares, transform por cena (filme), nível de cena + transform (HQ), modo de render de HQ, lettering
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Decisões resolvidas: (1) HQ NÃO usa número de página em lugar nenhum — paginação só na montagem final da revista; (2) modo de render padrão 'panels' + opt-in 'page'; (3) HQ inteira ADIADA por orientação do usuário — implementar só quando o pipeline de filme estiver pronto; até lá, no máximo testes descartáveis. Filme entregue: 38.1/38.2/38.3 (no ar).
+<!-- SECTION:NOTES:END -->

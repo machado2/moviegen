@@ -4,6 +4,7 @@ title: 'HQ: transform por cena (cena → quadros + layout)'
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:49'
+updated_date: '2026-06-28 17:45'
 labels:
   - pipeline
   - backend
@@ -30,3 +31,9 @@ Por cena, sob demanda, re-rodável, com contexto de elenco/lugares; idealmente c
 - [ ] #3 Re-transformar preserva renders já feitos dos quadros mantidos
 - [ ] #4 Suporta candidatos de breakdown/layout da cena
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+ADIADO por orientação do usuário: não implementar HQ até o pipeline (filme) estar pronto/maduro; no máximo testes descartáveis.
+<!-- SECTION:NOTES:END -->

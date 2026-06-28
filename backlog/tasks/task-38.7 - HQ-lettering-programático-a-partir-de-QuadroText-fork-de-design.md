@@ -4,6 +4,7 @@ title: 'HQ: lettering programático a partir de QuadroText (fork de design)'
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:49'
+updated_date: '2026-06-28 17:46'
 labels:
   - pipeline
   - comics
@@ -27,3 +28,9 @@ Interação com os modos de render: lettering programático combina com o Modo B
 - [ ] #1 Decisão registrada: lettering assado vs programático (e impacto nos modos de render)
 - [ ] #2 Se programático: balões/legendas/sfx renderizados a partir de QuadroText, com tipos e acentuação corretos, sem assar texto no gerador
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+ADIADO por orientação do usuário: não implementar HQ por ora.
+<!-- SECTION:NOTES:END -->

@@ -4,6 +4,7 @@ title: 'HQ: modo de render por prancha — página inteira (A) vs painéis+monta
 status: To Do
 assignee: []
 created_date: '2026-06-27 23:49'
+updated_date: '2026-06-28 17:45'
 labels:
   - pipeline
   - backend
@@ -33,3 +34,9 @@ Decisão em aberto (recomendação): renderMode 'page'|'panels' POR PRANCHA, com
 - [ ] #3 Modo B segue como hoje (quadros + montagem.py)
 - [ ] #4 Invariante: toda prancha termina com uma imagem final de página; export/book é agnóstico ao modo
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+DECISÃO (usuário): padrão = 'panels' (atual, montagem programática, não mexe no que funciona) + opt-in 'page' por prancha. ADIADO por orientação do usuário (não implementar HQ agora).
+<!-- SECTION:NOTES:END -->
